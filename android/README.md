@@ -54,10 +54,19 @@ To let GitHub Actions sign with it too, add it as the secrets described in
 ## Hide the browser bar
 
 Android shows a small address bar until it can confirm the app owns the
-site. The workflow's summary and release notes print a line like
-`ANDROID_CERT_SHA256=AB:CD:…`. Add it to the server's environment (Render →
-Environment) and redeploy; the server then publishes
-`/.well-known/assetlinks.json`. Reopen the app after a minute.
+site. It checks `/.well-known/assetlinks.json` at the root of the domain.
+Each APK release includes that file, made for its signing key.
+
+- **GitHub Pages** (`elrity.github.io/streambeam/`): the domain root is
+  `elrity.github.io`, served by a repository named `elrity.github.io`.
+  Create it (public), add the release's `assetlinks.json` as
+  `.well-known/assetlinks.json` plus an empty `.nojekyll` file at its root,
+  and turn on Pages for it (Settings → Pages → Deploy from branch → main).
+- **StreamBeam server** (Render, your own computer): set
+  `ANDROID_CERT_SHA256` to the fingerprint in the release notes and restart.
+
+Reopen the app a minute later. Use a permanent signing key first (below),
+otherwise the fingerprint changes with every build.
 
 ## Keep one signing key (recommended)
 

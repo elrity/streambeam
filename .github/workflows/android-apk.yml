@@ -42,6 +42,7 @@ jobs:
           fi
           node android/configure.mjs "$APP_URL" app.streambeam.caster "1.${{ github.run_number }}"
           echo "APP_HOST=$(grep '^host=' android/twa.properties | cut -d= -f2)" >> "$GITHUB_ENV"
+          echo "APP_URL=$(grep '^url=' android/twa.properties | cut -d= -f2-)" >> "$GITHUB_ENV"
 
       - name: Load the signing key
         env:
@@ -75,11 +76,11 @@ jobs:
           echo "APK=$APK" >> "$GITHUB_ENV"
           echo "CERT_SHA=$SHA" >> "$GITHUB_ENV"
           {
-            echo "### StreamBeam APK for https://$APP_HOST"
+            echo "### StreamBeam APK for $APP_URL"
             echo ""
             echo "Download it from the artifacts below${CHECK_BUILD:+ (check build only, not for installing)}."
             echo ""
-            echo "To hide the browser bar, set this on the server (Render → Environment): \`ANDROID_CERT_SHA256=$SHA\`"
+            echo "Signing certificate SHA-256 (to hide the browser bar, see android/README.md): \`$SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -95,4 +96,8 @@ jobs:
           gh release create "android-1.${{ github.run_number }}" "$APK" out/assetlinks.json \
             --target "${{ github.sha }}" \
             --title "StreamBeam for Android 1.${{ github.run_number }}" \
-            --notes "Opens https://$APP_HOST full screen. On your phone, download the .apk below and open it (allow installing from your browser when asked). Server setting to hide the browser bar: ANDROID_CERT_SHA256=$CERT_SHA"
+            --notes "StreamBeam for Android: opens $APP_URL as an app.
+
+          **Install:** on your Android phone, download the .apk below and open it. Allow installing from your browser when asked; if Play Protect warns about an unknown developer, tap More details → Install anyway.
+
+          Signing certificate SHA-256: $CERT_SHA"
