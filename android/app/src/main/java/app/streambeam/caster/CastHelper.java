@@ -5,6 +5,7 @@ import android.content.Context;
 import androidx.mediarouter.media.MediaRouteSelector;
 import androidx.mediarouter.media.MediaRouter;
 
+import com.google.android.gms.cast.CastDevice;
 import com.google.android.gms.cast.CastMediaControlIntent;
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaLoadRequestData;
@@ -158,6 +159,13 @@ class CastHelper {
     private MediaRouter.RouteInfo find(String device) {
         for (MediaRouter.RouteInfo r : castRoutes()) if (("cast:" + r.getId()).equals(device)) return r;
         return null;
+    }
+
+    /** The screen's IP address, so a file from the phone can be offered on the right network. */
+    String hostOf(String device) {
+        MediaRouter.RouteInfo route = find(device);
+        CastDevice cd = route != null ? CastDevice.getFromBundle(route.getExtras()) : null;
+        return cd != null && cd.getInetAddress() != null ? cd.getInetAddress().getHostAddress() : null;
     }
 
     boolean has(String device) {

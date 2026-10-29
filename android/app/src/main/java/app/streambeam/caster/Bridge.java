@@ -2,12 +2,17 @@ package app.streambeam.caster;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ContentResolver;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.view.View;
 import android.view.Window;
@@ -21,6 +26,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * The message channel between the web app and Android. The page sends {id, cmd, args};
  * replies are {id, ok, result|error}, and the app pushes {event: devices|status|session}.
@@ -28,6 +41,7 @@ import org.json.JSONObject;
  */
 class Bridge implements WebViewCompat.WebMessageListener {
     private static final long SCAN_MS = 9000;
+    static final int PICK_REQUEST = 43;
 
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -37,6 +51,9 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private boolean scanning;
     private String active;
     private final Runnable endScan;
+    private final LocalServer files = new LocalServer();
+    private final ExecutorService work = Executors.newSingleThreadExecutor();
+    private int pickId = -1;
 
     Bridge(Activity activity) {
         this.activity = activity;
@@ -88,11 +105,21 @@ class Bridge implements WebViewCompat.WebMessageListener {
             case "play": {
                 String device = a.getString("deviceId");
                 Media media = new Media(a.getString("url"), a.optString("title", "Video"), a.optString("mime", "video/mp4"), a.optDouble("start", 0), a.optBoolean("live"));
-                if (cast.has(device)) cast.play(device, media, wrap(device, done));
-                else if (dlna.has(device)) dlna.play(device, media, wrap(device, done));
-                else done.fail("That screen isn’t available. Search again.");
+                if (!cast.has(device) && !dlna.has(device)) {
+                    done.fail("That screen isn’t available. Search again.");
+                } else if (files.owns(media.url)) {
+                    // A file from this phone: give the screen this phone's address on the network that reaches it.
+                    String host = cast.has(device) ? cast.hostOf(device) : dlna.hostOf(device);
+                    work.execute(() -> {
+                        Media shared = media.withUrl(files.publicUrl(media.url, host));
+                        main.post(() -> startPlay(device, shared, done));
+                    });
+                } else startPlay(device, media, done);
                 break;
             }
+            case "pickFiles":
+                pickFiles(id);
+                break;
             case "pause":
             case "resume":
             case "seek":
@@ -122,6 +149,96 @@ class Bridge implements WebViewCompat.WebMessageListener {
             default:
                 done.fail("Unknown command: " + cmd);
         }
+    }
+
+    private void startPlay(String device, Media media, Done done) {
+        if (cast.has(device)) cast.play(device, media, wrap(device, done));
+        else if (dlna.has(device)) dlna.play(device, media, wrap(device, done));
+        else done.fail("That screen isn’t available. Search again.");
+    }
+
+    /* ---------- Files from this phone ---------- */
+
+    private void pickFiles(int id) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"video/*", "audio/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        pickId = id;
+        try {
+            activity.startActivityForResult(intent, PICK_REQUEST);
+        } catch (ActivityNotFoundException e) {
+            pickId = -1;
+            reply(id, false, "No file picker on this phone.");
+        }
+    }
+
+    /** Called by the activity with the picker's result. */
+    void onFilesPicked(int resultCode, Intent data) {
+        int id = pickId;
+        pickId = -1;
+        if (id < 0) return;
+        List<Uri> uris = new ArrayList<>();
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            ClipData clip = data.getClipData();
+            if (clip != null) for (int i = 0; i < clip.getItemCount(); i++) uris.add(clip.getItemAt(i).getUri());
+            else if (data.getData() != null) uris.add(data.getData());
+        }
+        work.execute(() -> {
+            JSONArray list = new JSONArray();
+            for (Uri uri : uris) {
+                try {
+                    list.put(register(uri));
+                } catch (Exception ignored) {
+                }
+            }
+            try {
+                send(new JSONObject().put("id", id).put("ok", true).put("result", new JSONObject().put("files", list)));
+            } catch (JSONException ignored) {
+            }
+        });
+    }
+
+    private JSONObject register(Uri uri) throws IOException, JSONException {
+        ContentResolver resolver = activity.getContentResolver();
+        String name = "Video";
+        long size = -1;
+        try (Cursor c = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE}, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                if (!c.isNull(0)) name = c.getString(0);
+                if (!c.isNull(1)) size = c.getLong(1);
+            }
+        }
+        String mime = resolver.getType(uri);
+        if (mime == null) mime = "video/mp4";
+        final long length = size;
+        LocalServer.Source source = new LocalServer.Source() {
+            @Override
+            public long size() {
+                return length;
+            }
+
+            @Override
+            public InputStream open(long offset) throws IOException {
+                ParcelFileDescriptor pfd = resolver.openFileDescriptor(uri, "r");
+                if (pfd == null) throw new IOException("Can’t open the file.");
+                FileInputStream in = new ParcelFileDescriptor.AutoCloseInputStream(pfd);
+                try {
+                    in.getChannel().position(offset);
+                } catch (IOException e) {
+                    long skipped = 0;
+                    while (skipped < offset) {
+                        long n = in.skip(offset - skipped);
+                        if (n <= 0) break;
+                        skipped += n;
+                    }
+                }
+                return in;
+            }
+        };
+        String url = files.add(source, name, mime);
+        return new JSONObject().put("url", url).put("name", name).put("size", size).put("mime", mime);
     }
 
     /** Remembers which screen is in use once a command to it succeeds. */
@@ -239,6 +356,8 @@ class Bridge implements WebViewCompat.WebMessageListener {
 
     void release() {
         main.removeCallbacksAndMessages(null);
+        files.release();
+        work.shutdownNow();
         cast.release();
         dlna.release();
     }
@@ -255,6 +374,10 @@ class Bridge implements WebViewCompat.WebMessageListener {
             this.mime = mime;
             this.start = start;
             this.live = live;
+        }
+
+        Media withUrl(String newUrl) {
+            return new Media(newUrl, title, mime, start, live);
         }
     }
 }

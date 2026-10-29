@@ -1026,7 +1026,7 @@ function ncall(cmd, args = {}) {
   return new Promise((res, rej) => {
     const id = ++N.seq; N.wait.set(id, { res, rej });
     NB.postMessage(JSON.stringify({ id, cmd, args }));
-    setTimeout(() => { if (N.wait.delete(id)) rej(new Error('The screen didn’t answer.')); }, 25000);
+    setTimeout(() => { if (N.wait.delete(id)) rej(new Error('The screen didn’t answer.')); }, cmd === 'pickFiles' ? 600000 : 25000);
   });
 }
 const nativeOn = () => P.ext === 'native';
@@ -1034,7 +1034,7 @@ const castable = url => /^https?:/i.test(url) && !ytParse(url);
 const MIME = { MP4: 'video/mp4', WEBM: 'video/webm', HLS: 'application/x-mpegURL', DASH: 'application/dash+xml', MKV: 'video/x-matroska', MOV: 'video/quicktime', AVI: 'video/x-msvideo', FLV: 'video/x-flv', WMV: 'video/x-ms-wmv', TS: 'video/mp2t', AUDIO: 'audio/mpeg' };
 async function nativePlay(item, start) {
   try {
-    await ncall('play', { deviceId: S.device.slice(2), url: item.url, title: item.title, mime: MIME[fmtOf(item.url)] || 'video/mp4', start: Math.floor(start || 0), live: !!item.live });
+    await ncall('play', { deviceId: S.device.slice(2), url: item.url, title: item.title, mime: item.mime || MIME[fmtOf(item.url)] || 'video/mp4', start: Math.floor(start || 0), live: !!item.live });
   } catch (e) { nativeFail(e); }
 }
 function nativeFail(e) { toast(e.message || 'The screen didn’t respond'); P.playing = false; tick(true); }
@@ -1241,9 +1241,10 @@ const views = {
   },
 
   local() {
-    return `<label class="drop" id="drop" for="fileIn">${icon('upload')}<span>Choose or drop files</span><span class="btn sm acc">Choose files</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" multiple hidden></label>
+    return `${N.on ? `<button class="drop" data-act="pickNative" style="width:100%">${icon('upload')}<span>Videos and music on this phone</span><span class="btn sm acc">Choose files</span></button>`
+      : `<label class="drop" id="drop" for="fileIn">${icon('upload')}<span>Choose or drop files</span><span class="btn sm acc">Choose files</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" multiple hidden></label>`}
       ${S.local.length ? `<section class="panel"><div data-list="local">${S.local.map(m => mediaRow(m, () => A.queue() + A.cast())).join('')}</div></section>` : ''}
-      ${S.device.startsWith('n:') ? '<div class="note">Files from this phone play here, not on the TV.</div>' : ''}`;
+      ${!N.on && S.device.startsWith('n:') ? '<div class="note">Files play here. Use the StreamBeam app to send them to a screen.</div>' : ''}`;
   },
 
   iptv() {
@@ -1565,6 +1566,12 @@ document.addEventListener('click', async e => {
     case 'openMirror': go('mirror'); break;
     case 'startMirror': startMirror(); break;
     case 'stopMirror': stopMirror(); break;
+    case 'pickNative':
+      ncall('pickFiles').then(r => {
+        (r.files || []).forEach(f => S.local.push({ id: uid(), title: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, url: f.url, mime: f.mime, res: '', size: f.size > 0 ? (f.size / 1048576).toFixed(1) + ' MB' : '', duration: 0 }));
+        render();
+      }).catch(err => toast(err.message));
+      break;
     case 'nativeMirror': ncall('openCastSettings').catch(err => toast(err.message)); break;
     case 'bookmark': {
       const i = S.bookmarks.findIndex(x => x.url === S.url);

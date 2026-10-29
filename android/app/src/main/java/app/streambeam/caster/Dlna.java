@@ -80,6 +80,11 @@ class Dlna {
         return found.containsKey(device);
     }
 
+    String hostOf(String device) {
+        Device d = found.get(device);
+        return d != null ? d.host : null;
+    }
+
     List<JSONObject> devices() {
         List<JSONObject> list = new ArrayList<>();
         for (Device d : found.values()) {
@@ -247,9 +252,21 @@ class Dlna {
                     soap(d.avUrl, d.avType, "Stop", "");
                 } catch (IOException ignored) {
                 }
-                soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData>"
-                        + xml(didl(media)) + "</CurrentURIMetaData>");
-                soap(d.avUrl, d.avType, "Play", "<Speed>1</Speed>");
+                try {
+                    soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData>"
+                            + xml(didl(media)) + "</CurrentURIMetaData>");
+                } catch (IOException withMetadata) {
+                    // Some screens reject the description; the link alone is enough for them.
+                    soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>");
+                }
+                try {
+                    soap(d.avUrl, d.avType, "Play", "<Speed>1</Speed>");
+                } catch (IOException playError) {
+                    // Some screens start on their own and refuse an extra Play.
+                    Thread.sleep(800);
+                    String state = tag(soap(d.avUrl, d.avType, "GetTransportInfo", ""), "CurrentTransportState");
+                    if (!"PLAYING".equals(state) && !"TRANSITIONING".equals(state)) throw playError;
+                }
                 startPolling();
                 done.ok();
             } catch (Exception e) {
@@ -364,11 +381,15 @@ class Dlna {
     /* ---------- UPnP helpers ---------- */
 
     private static String didl(Bridge.Media media) {
-        String upnpClass = media.mime.startsWith("audio") ? "object.item.audioItem.musicTrack" : "object.item.videoItem.movie";
+        String upnpClass = media.mime.startsWith("audio") ? "object.item.audioItem.musicTrack" : "object.item.videoItem";
+        // Standard DLNA flags (streaming, seekable by byte range). Many car and TV receivers want them before showing video.
+        String lower = media.mime.toLowerCase(Locale.US);
+        String features = lower.contains("mpegurl") || lower.contains("dash") ? "*"
+                : "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000";
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
                 + " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
                 + "<dc:title>" + xml(media.title) + "</dc:title><upnp:class>" + upnpClass + "</upnp:class>"
-                + "<res protocolInfo=\"http-get:*:" + xml(media.mime) + ":*\">" + xml(media.url) + "</res></item></DIDL-Lite>";
+                + "<res protocolInfo=\"http-get:*:" + xml(media.mime) + ":" + features + "\">" + xml(media.url) + "</res></item></DIDL-Lite>";
     }
 
     private static String soap(String url, String service, String action, String args) throws IOException {
