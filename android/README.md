@@ -1,10 +1,24 @@
 # StreamBeam for Android (APK)
 
-An Android app that opens your hosted StreamBeam full screen, with its own
-icon and long-press shortcuts (News, Weather, Ask Gemini, Mirror). It is a
-Trusted Web Activity: the phone's Chrome runs the page, so casting, YouTube
-and Gemini work exactly as on the web, and every server update reaches the
-app without reinstalling.
+The Android app shows the hosted StreamBeam full screen and adds what a web
+page can't do: it **searches your Wi-Fi for screens** and casts to them.
+
+- **Google Cast**: Chromecast, Google TV, Android TVs and head units with Cast
+  built in (found with Android's media router, played with the Cast SDK's
+  default receiver). Needs Google Play services.
+- **DLNA / UPnP renderers**: most smart TVs (Samsung, LG, Sony…), many car head
+  units, Kodi, set-top boxes. Found with an SSDP search on every Wi-Fi and
+  hotspot interface, controlled with UPnP AVTransport (play, pause, seek,
+  volume).
+- **Screen mirroring** opens Android's own screen-cast settings.
+
+The phone and the screen must be on the same network. For a car screen, join
+the car's Wi-Fi or connect the car to the phone's hotspot. YouTube can't be
+cast this way (YouTube only casts from its own app), and files on the phone
+play on the phone.
+
+The web page talks to Android through a message channel that only
+`https://elrity.github.io` can open (`WebViewCompat.addWebMessageListener`).
 
 ## Build it in Android Studio (Mac, Windows or Linux)
 
@@ -51,11 +65,12 @@ To let GitHub Actions sign with it too, add it as the secrets described in
    `StreamBeam-1.N.apk` on your phone. Open it and allow installing from your
    browser when Android asks.
 
-## Hide the browser bar
+## Open links in the app
 
-Android shows a small address bar until it can confirm the app owns the
-site. It checks `/.well-known/assetlinks.json` at the root of the domain.
-Each APK release includes that file, made for its signing key.
+The app has no address bar. Links to the app's site open in the app once
+Android confirms the app owns the site. It checks
+`/.well-known/assetlinks.json` at the root of the domain; each APK release
+includes that file, made for its signing key.
 
 - **GitHub Pages** (`elrity.github.io/streambeam/`): the domain root is
   `elrity.github.io`, served by a repository named `elrity.github.io`.

@@ -14,7 +14,8 @@ app, plus an Android APK.
 Edge). Long-press the icon for shortcuts: Today's news, Weather, Ask Gemini,
 Mirror screen.
 
-**Android APK.** Needs Android 5+ with Chrome (or Samsung Internet / Edge).
+**Android APK.** Needs Android 6 or newer. The app is what searches your Wi-Fi
+for TVs and car screens (Google Cast and DLNA); a web browser can't.
 
 1. Open the APK link on the phone and download `StreamBeam-….apk`.
 2. Tap it. When Android asks, allow installing from Chrome (or Files) and tap
@@ -26,9 +27,11 @@ The app's features load from the web, so fixes arrive without reinstalling.
 
 ## First steps in the app
 
-- **Cast:** the TV and phone must share a Wi-Fi network. Tap the cast button
-  at the top and pick **Nearby screen** (Chromecast, Google TV, AirPlay where
-  the browser supports it). Demo TVs for trying the app are in Settings.
+- **Cast:** tap the dial on the home screen. In the Android app it searches
+  your Wi-Fi and lists the TVs and car screens it finds (Google Cast and DLNA).
+  The phone and screen must share a network; for a car, join the car's Wi-Fi or
+  connect the car to your phone's hotspot. In a browser, pick **Nearby
+  screen** (Chrome's own casting). Demo screens are in Settings.
 - **Today (Gemini):** tiles open Gemini with the question ready to paste. For
   answers inside the app, add your own free key from
   [aistudio.google.com/apikey](https://aistudio.google.com/apikey) in
@@ -41,6 +44,6 @@ The app's features load from the web, so fixes arrive without reinstalling.
 | Folder | What it is |
 | --- | --- |
 | `web/` | The app (`index.html`, one file) and an optional Node server (`server.mjs`) for a shared Gemini key, an app password and casting to VLC. See [web/README.md](web/README.md). |
-| `android/` | The Android app: opens the hosted app full screen. See [android/README.md](android/README.md). |
+| `android/` | The Android app: hosts the app and adds real screen search and casting (Google Cast, DLNA). See [android/README.md](android/README.md). |
 | `.github/workflows/` | Publishes `web/` to GitHub Pages and builds the APK on every change. |
 | `render.yaml` | Optional: run the server on Render instead of GitHub Pages. |

@@ -1,5 +1,6 @@
-// StreamBeam for Android: a Trusted Web Activity that opens the hosted app full screen.
-// Run `node configure.mjs https://your-app-address` first; it writes twa.properties and the URL-specific resources.
+// StreamBeam for Android: hosts the web app full screen and adds native screen discovery and casting
+// (Google Cast + DLNA). Run `node configure.mjs https://your-app-address` first; it writes twa.properties
+// and the URL-specific resources.
 plugins {
     id 'com.android.application'
 }
@@ -18,11 +19,11 @@ android {
 
     defaultConfig {
         applicationId twa.getProperty('applicationId')
-        minSdk 21
+        minSdk 23
         targetSdk 35
         versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
         versionName twa.getProperty('versionName', '1.0')
-        manifestPlaceholders = [hostName: twa.getProperty('host'), defaultUrl: twa.getProperty('url')]
+        manifestPlaceholders = [hostName: twa.getProperty('host'), pathPrefix: twa.getProperty('path', '/')]
     }
 
     signingConfigs {
@@ -43,6 +44,10 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig true
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -50,5 +55,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'androidx.mediarouter:mediarouter:1.7.0'
+    implementation 'com.google.android.gms:play-services-cast-framework:21.4.0'
 }

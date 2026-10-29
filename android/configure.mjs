@@ -18,7 +18,6 @@ if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(appId)) { console.error('Appli
 const start = url.origin + (url.pathname.endsWith('/') ? url.pathname : url.pathname + '/');
 const xml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '\\"').replace(/'/g, "\\'");
 const attr = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-const statements = JSON.stringify([{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'web', site: url.origin } }]);
 const SHORTCUTS = [
   ['news', 'News', 'Today’s news'],
   ['weather', 'Weather', 'Today’s weather'],
@@ -27,13 +26,13 @@ const SHORTCUTS = [
 ];
 
 writeFileSync(path.join(dir, 'twa.properties'),
-  `url=${start}\nhost=${url.host}\napplicationId=${appId}\nversionName=${versionName}\n`);
+  `url=${start}\nhost=${url.host}\npath=${url.pathname.replace(/\/+$/, '') || '/'}\napplicationId=${appId}\nversionName=${versionName}\n`);
 
 mkdirSync(path.join(dir, 'app/src/main/res/values'), { recursive: true });
 writeFileSync(path.join(dir, 'app/src/main/res/values/twa.xml'), `<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">StreamBeam</string>
-    <string name="asset_statements" translatable="false">${xml(statements)}</string>
+    <string name="start_url" translatable="false">${xml(start)}</string>
 ${SHORTCUTS.map(([id, short, long]) => `    <string name="shortcut_${id}_short">${xml(short)}</string>\n    <string name="shortcut_${id}_long">${xml(long)}</string>`).join('\n')}
 </resources>
 `);
@@ -50,7 +49,7 @@ ${SHORTCUTS.map(([id]) => `    <shortcut
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="${attr(appId)}"
-            android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:targetClass="app.streambeam.caster.MainActivity"
             android:data="${attr(start + '?go=' + id)}" />
     </shortcut>`).join('\n')}
 </shortcuts>

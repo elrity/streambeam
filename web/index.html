@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0d1117">
+<meta name="theme-color" content="#e6e7ea">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="StreamBeam">
@@ -11,344 +11,248 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- APP-START -->
-<title>StreamBeam Video Caster</title>
+<title>StreamBeam</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
 <style>
-/* Layout: app shell — top bar, left nav rail (bottom tabs on phones), main pane, persistent cast mini-remote at the bottom. Dark-first like a living-room remote. */
+/* Layout: one calm column. Home is a dial (clock, connection, live bars) above a 3×3 grid of round section
+   buttons; each section opens full screen with a back button. Soft raised/inset surfaces, thin type, mono labels,
+   a single blue accent and a tiny warm dot for "live". */
 :root {
-  --bg: #0d1117; --panel: #151b24; --panel-2: #1c2430; --line: #2a3443;
-  --fg: #e9edf3; --muted: #8d98aa; --accent: #ff8a3d; --accent-ink: #1b0d03;
-  --accent-soft: rgba(255,138,61,.14); --ok: #3ccf91; --warn: #f2c14e; --bad: #ff5d6c;
-  --tv: #05070a; --shadow: 0 18px 50px rgba(0,0,0,.45);
-  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
-  --f-body: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --r: 10px;
-  color-scheme: dark;
+  --bg: #e6e7ea; --fg: #2b2e34; --muted: #8b9099; --faint: #c3c7ce; --line: rgba(110, 118, 132, .16);
+  --hi: rgba(255, 255, 255, .92); --lo: rgba(158, 166, 181, .58);
+  --accent: #2f4db0; --accent-soft: rgba(47, 77, 176, .1); --warm: #e1543a; --ok: #3a9a74;
+  --screen: #16181c; --bar: #eef0f3;
+  --raise: 9px 9px 20px var(--lo), -9px -9px 20px var(--hi);
+  --raise-sm: 5px 5px 12px var(--lo), -5px -5px 12px var(--hi);
+  --inset: inset 4px 4px 9px var(--lo), inset -4px -4px 9px var(--hi);
+  --inset-sm: inset 2px 2px 5px var(--lo), inset -2px -2px 5px var(--hi);
+  --f-ui: "Jost", "Futura", "Avenir Next", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
-  --bg: #f2f4f7; --panel: #ffffff; --panel-2: #eaeef3; --line: #d5dce6;
-  --fg: #121820; --muted: #566175; --accent: #d25a0b; --accent-ink: #ffffff;
-  --accent-soft: rgba(210,90,11,.10); --ok: #138a5a; --warn: #a77700; --bad: #c8283a;
-  --tv: #0b0e13; --shadow: 0 18px 40px rgba(20,30,45,.16); color-scheme: light; } }
-:root[data-theme="light"] {
-  --bg: #f2f4f7; --panel: #ffffff; --panel-2: #eaeef3; --line: #d5dce6;
-  --fg: #121820; --muted: #566175; --accent: #d25a0b; --accent-ink: #ffffff;
-  --accent-soft: rgba(210,90,11,.10); --ok: #138a5a; --warn: #a77700; --bad: #c8283a;
-  --tv: #0b0e13; --shadow: 0 18px 40px rgba(20,30,45,.16); color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1f2125; --fg: #e3e5e9; --muted: #8d929b; --faint: #4a4e56; --line: rgba(255, 255, 255, .07);
+  --hi: rgba(255, 255, 255, .055); --lo: rgba(0, 0, 0, .6);
+  --accent: #91a7ff; --accent-soft: rgba(145, 167, 255, .12); --warm: #ff7759; --ok: #5cc79c;
+  --screen: #0c0d0f; --bar: #2a2d32; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1f2125; --fg: #e3e5e9; --muted: #8d929b; --faint: #4a4e56; --line: rgba(255, 255, 255, .07);
+  --hi: rgba(255, 255, 255, .055); --lo: rgba(0, 0, 0, .6);
+  --accent: #91a7ff; --accent-soft: rgba(145, 167, 255, .12); --warm: #ff7759; --ok: #5cc79c;
+  --screen: #0c0d0f; --bar: #2a2d32; color-scheme: dark; }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
+body > video { display: none; }
 html, body { height: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--f-body); overflow: hidden; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.5 var(--f-ui); overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-svg.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+svg.i { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.mono, .label { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.acc { color: var(--accent); }
 .muted { color: var(--muted); }
 
-.app { height: 100%; display: grid; grid-template-columns: 216px minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto; grid-template-areas: "top top" "nav main" "mini mini"; }
+/* Surfaces */
+.raise { background: var(--bg); box-shadow: var(--raise); }
+.inset { background: var(--bg); box-shadow: var(--inset); }
+.round { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); box-shadow: var(--raise-sm); color: var(--fg); flex: none; transition: box-shadow .15s; }
+.round:active, .round[aria-pressed="true"] { box-shadow: var(--inset-sm); }
+.round.sm { width: 40px; height: 40px; }
+.round.sm svg.i { width: 18px; height: 18px; }
+.round:disabled { opacity: .4; cursor: default; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: 999px; background: var(--bg); box-shadow: var(--raise-sm); font-weight: 400; font-size: 15px; white-space: nowrap; transition: box-shadow .15s; }
+.btn:active { box-shadow: var(--inset-sm); }
+.btn.acc { color: var(--accent); }
+.btn.sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.btn svg.i { width: 18px; height: 18px; }
+.btn.flat { box-shadow: none; padding: 0 10px; color: var(--muted); }
+.btn.flat:active { box-shadow: none; color: var(--fg); }
+.field { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px; border-radius: 24px; box-shadow: var(--inset); background: var(--bg); }
+.field input, .field select { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 15px; }
+.field svg.i { color: var(--muted); width: 18px; height: 18px; }
+textarea { width: 100%; min-height: 140px; resize: vertical; padding: 14px; border: 0; border-radius: 18px; box-shadow: var(--inset); background: var(--bg); font: 12.5px/1.55 var(--f-mono); outline: none; }
 
-/* Top bar */
-.top { grid-area: top; display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--panel); }
-.brand { flex: none; display: flex; align-items: center; gap: 10px; font: 800 19px/1 var(--f-display); letter-spacing: -.01em; white-space: nowrap; }
-.brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }
-.brand .mark svg { width: 18px; height: 18px; stroke-width: 2.2; }
-.top .spacer { flex: 1; }
-.cast-btn { min-width: 0; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 600; font-size: 14px; max-width: 50vw; }
-.cast-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cast-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; border: 1px solid transparent; background: transparent; }
-.icon-btn:hover { background: var(--panel-2); }
+/* App frame */
+.app { position: relative; height: 100%; display: flex; flex-direction: column; }
+.main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-block: calc(8px + env(safe-area-inset-top, 0px)) 120px; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+.view { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.view.home { max-width: 520px; gap: 26px; }
+.head { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 14px; padding-block: 14px 10px; background: var(--bg); }
+.head .grow { flex: 1; min-width: 0; }
+.head h1 { margin: 0; font: 500 12px/1 var(--f-mono); letter-spacing: .2em; text-transform: uppercase; }
+.head .sub { margin-top: 4px; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Nav */
-.nav { grid-area: nav; border-right: 1px solid var(--line); background: var(--panel); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
-.nav button { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 600; text-align: left; }
-.nav button:hover { color: var(--fg); background: var(--panel-2); }
-.nav button[aria-current="page"] { color: var(--fg); background: var(--accent-soft); }
-.nav button[aria-current="page"] svg { color: var(--accent); }
-.nav .badge { margin-left: auto; font: 600 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
-.nav .sep { height: 1px; background: var(--line); margin: 8px 6px; }
+/* Home */
+.home-top { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; }
+.dial-wrap { position: relative; width: min(84vw, 380px, 44vh); aspect-ratio: 1; max-width: 100%; margin: 6px auto 0; }
+.dial-wrap svg.bars { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dial-wrap svg.bars rect { fill: var(--bar); }
+.dial-wrap svg.bars .barset { filter: drop-shadow(2px 2px 2px var(--lo)) drop-shadow(-1px -1px 1px var(--hi)); }
+.dial-wrap svg.bars .arc { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linecap: round; transition: stroke-dasharray .4s; }
+.dial-wrap svg.bars .track { fill: none; stroke: var(--line); stroke-width: 1; }
+.dial { position: absolute; inset: 21%; border-radius: 50%; background: var(--bg); box-shadow: var(--raise); display: grid; place-items: center; }
+.dial-in { width: 84%; height: 84%; border-radius: 50%; box-shadow: var(--inset); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; padding: 8%; }
+.clock { font: 200 clamp(40px, 13vw, 60px)/1 var(--f-ui); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.date { font: 400 10.5px/1.3 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.conn { margin-top: 8px; display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 6px 12px; border-radius: 999px; font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.conn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex: none; }
+.conn.on .dot { background: var(--ok); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 12px; padding-block: 4px 10px; }
+.go { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--fg); position: relative; }
+.go .round { width: 64px; height: 64px; }
+.go .round svg.i { width: 24px; height: 24px; }
+.go:active .round { box-shadow: var(--inset-sm); }
+.go .label { color: var(--fg); font-size: 10.5px; }
+.go .count { position: absolute; top: -2px; left: calc(50% + 20px); min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--bg); box-shadow: var(--raise-sm); font: 500 10px/20px var(--f-mono); color: var(--accent); }
 
-/* Main */
-.main { grid-area: main; overflow-y: auto; padding-block: 22px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.view { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-.view-head { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.view-head h1 { margin: 0; font: 800 clamp(24px, 3.4vw, 32px)/1.1 var(--f-display); letter-spacing: -.02em; text-wrap: balance; }
-.view-head p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
-.view-head .grow { flex: 1; min-width: 0; }
-.eyebrow { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
-.panel-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.panel-h h2 { margin: 0; font: 700 15px/1.2 var(--f-body); }
-.panel-h .grow { flex: 1; }
-
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 600; font-size: 14px; white-space: nowrap; }
-.btn:hover { border-color: var(--muted); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { filter: brightness(1.06); }
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
-.btn.ghost:hover { color: var(--fg); background: var(--panel-2); }
-.btn.sm { padding: 6px 10px; font-size: 13px; }
-.btn svg.i { width: 17px; height: 17px; }
-
-/* Browser */
-.urlbar { display: flex; gap: 8px; padding: 10px; align-items: center; }
-.urlbar .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 42px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
-.urlbar .field:focus-within { border-color: var(--accent); }
-.urlbar input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-family: var(--f-mono); font-size: 13px; }
-.urlbar .star.on { color: var(--warn); }
-.urlbar .star.on svg { fill: currentColor; }
-.notice { margin: 0 10px 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; background: var(--panel-2); border-left: 3px solid var(--warn); }
-.notice.ok { border-left-color: var(--ok); }
-
-.sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.site { text-align: left; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 6px; }
-.site:hover { border-color: var(--accent); }
-.site b { font: 700 15px/1.25 var(--f-body); }
-.site small { color: var(--muted); font-family: var(--f-mono); font-size: 11.5px; overflow-wrap: anywhere; }
-.site span { color: var(--muted); font-size: 13px; }
-
-/* Media rows */
-.list { display: flex; flex-direction: column; }
-.row { display: grid; grid-template-columns: 84px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); }
-.list > .row:first-child { border-top: 0; }
-.row.playing { background: var(--accent-soft); }
-.thumb { width: 84px; aspect-ratio: 16/9; max-width: 100%; border-radius: 6px; position: relative; overflow: hidden; display: grid; place-items: center; color: rgba(255,255,255,.92); font: 800 13px/1 var(--f-display); text-shadow: 0 1px 3px rgba(0,0,0,.5); }
-.thumb .dur { position: absolute; right: 4px; bottom: 4px; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,.72); color: #fff; font: 600 10px/1.3 var(--f-mono); text-shadow: none; }
+/* Lists */
+.panel { border-radius: 26px; background: var(--bg); box-shadow: var(--raise); padding: 6px 0; }
+.panel-t { display: flex; align-items: center; gap: 10px; padding: 14px 20px 6px; }
+.panel-t .grow { flex: 1; }
+.row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 20px; }
+.row + .row { border-top: 1px solid var(--line); }
+.row.on .t { color: var(--accent); }
+.thumb { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; font: 500 12px/1 var(--f-mono); letter-spacing: .06em; color: var(--fg); box-shadow: var(--inset-sm); background-size: cover; background-position: center; overflow: hidden; }
 .meta { min-width: 0; }
-.meta .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta .s { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
-.meta .u { font: 11.5px/1.3 var(--f-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
-.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font: 600 10.5px/1.4 var(--f-mono); letter-spacing: .04em; border: 1px solid var(--line); color: var(--muted); }
-.chip.fmt-MP4 { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-.chip.fmt-HLS { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.chip.fmt-YOUTUBE { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
-.chip.fmt-DASH, .chip.fmt-MKV { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
-.chip.live { color: #fff; background: var(--bad); border-color: var(--bad); }
-.actions { display: flex; gap: 6px; align-items: center; }
-.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
-.empty b { display: block; color: var(--fg); font-size: 15px; margin-bottom: 4px; }
+.meta .t { font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta .s { margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 10px; font: 400 11px/1.4 var(--f-mono); letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+.meta .s .tag-YOUTUBE, .meta .s .tag-LIVE { color: var(--warm); }
+.meta .s .tag-VLC { color: var(--accent); }
+.acts { display: flex; gap: 8px; align-items: center; }
+.empty { padding: 26px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+.qn { font: 500 11px/1 var(--f-mono); color: var(--muted); }
 
-/* Now playing */
-.np { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
-.tv { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
-.screen { position: relative; aspect-ratio: 16/9; max-width: 100%; border-radius: 6px; overflow: hidden; background: var(--tv); }
-.screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; }
+/* Remote */
+.screen { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 22px; overflow: hidden; background: var(--screen); box-shadow: var(--raise); }
+.screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .screen .poster { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 6%; color: #fff; }
-.screen .poster h3 { margin: 0; font: 800 clamp(20px, 3.6vw, 40px)/1.05 var(--f-display); letter-spacing: -.02em; text-shadow: 0 2px 12px rgba(0,0,0,.4); text-wrap: balance; }
-.screen .poster p { margin: 6px 0 0; font: 500 12px/1.4 var(--f-mono); opacity: .85; }
-.screen .osd { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; padding: 10px 12px; font: 600 11px/1 var(--f-mono); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
-.screen .osd .rec { display: inline-flex; gap: 6px; align-items: center; }
-.screen .osd .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(60,207,145,.25); }
-.screen .cue { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); max-width: 86%; text-align: center; padding: 3px 8px; border-radius: 3px; background: rgba(0,0,0,.72); color: #fff; font-weight: 600; }
-.screen .pause-ind { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
-.screen .pause-ind span { width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,.5); display: grid; place-items: center; color: #fff; }
-.screen .pause-ind svg { width: 30px; height: 30px; }
-.tv-foot { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px 0; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
-.screen.idle .poster { justify-content: center; align-items: center; text-align: center; }
+.screen .poster h3 { margin: 0; font: 300 clamp(20px, 4.4vw, 34px)/1.1 var(--f-ui); }
+.screen .idle { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(255, 255, 255, .45); font: 500 11px/1 var(--f-mono); letter-spacing: .16em; text-transform: uppercase; }
+.screen .osd { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; padding: 12px 14px; font: 500 10.5px/1 var(--f-mono); letter-spacing: .1em; color: #fff; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.screen .cue { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); max-width: 86%; text-align: center; padding: 3px 8px; border-radius: 4px; background: rgba(0, 0, 0, .72); color: #fff; }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warm); margin-right: 6px; vertical-align: 1px; }
+.np-title { font: 300 24px/1.2 var(--f-ui); overflow-wrap: anywhere; }
+.seek { display: flex; flex-direction: column; gap: 8px; }
+.times { display: flex; justify-content: space-between; font: 400 11px/1 var(--f-mono); color: var(--muted); letter-spacing: .06em; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; }
+input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; box-shadow: var(--inset-sm); background: linear-gradient(to right, var(--accent) 0 var(--p, 0%), var(--bg) var(--p, 0%)); background-size: 100% 2px; background-repeat: no-repeat; background-position: center; }
+input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; box-shadow: var(--inset-sm); background: linear-gradient(to right, var(--accent) 0 var(--p, 0%), var(--bg) var(--p, 0%)); background-size: 100% 2px; background-repeat: no-repeat; background-position: center; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -7px; border-radius: 50%; background: var(--bg); box-shadow: var(--raise-sm); border: 0; }
+input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--bg); box-shadow: var(--raise-sm); border: 0; }
+input[type=range]:disabled { opacity: .45; }
+.transport { display: flex; justify-content: center; align-items: center; gap: 14px; }
+.transport .big { width: 76px; height: 76px; color: var(--accent); }
+.transport .big svg.i { width: 28px; height: 28px; }
+.pills { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+.volrow { display: flex; align-items: center; gap: 14px; }
+.volrow input { flex: 1; }
+.devpill { display: inline-flex; align-items: center; gap: 8px; align-self: center; max-width: 100%; }
+.devpill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note { padding: 14px 18px; border-radius: 20px; box-shadow: var(--inset-sm); font-size: 14px; color: var(--muted); display: flex; flex-direction: column; gap: 10px; }
+.note b { color: var(--fg); font-weight: 400; }
+.note.warn { color: var(--fg); }
+.note .acts { flex-wrap: wrap; }
+.yt-host { position: fixed; z-index: 3; left: -9999px; top: 0; width: 320px; height: 180px; visibility: hidden; border-radius: 22px; overflow: hidden; background: #000; }
+.yt-host iframe { width: 100%; height: 100%; border: 0; display: block; }
 
-.remote { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
-.remote .title { font: 800 20px/1.2 var(--f-display); letter-spacing: -.01em; overflow-wrap: anywhere; }
-.seek { display: flex; flex-direction: column; gap: 4px; }
-.seek .times { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
-input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; }
-input[type=range]::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); }
-input[type=range]::-moz-range-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: var(--fg); border: 0; }
-input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--fg); border: 0; }
-.transport { display: flex; justify-content: center; align-items: center; gap: 10px; }
-.transport .icon-btn { width: 46px; height: 46px; border-color: var(--line); background: var(--panel-2); }
-.transport .icon-btn { position: relative; }
-.transport .big { width: 64px; height: 64px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-.transport .big svg { width: 26px; height: 26px; }
-.transport .big:hover { background: var(--accent); filter: brightness(1.06); }
-.knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.knob { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); }
-.knob label { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.knob select { border: 0; background: transparent; font-weight: 600; padding: 0; outline: none; }
-.knob select option { background: var(--panel); }
-.knob.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 10px; }
-.knob.wide label { flex: none; }
-
-/* Queue */
-.qnum { font: 600 12px/1 var(--f-mono); color: var(--muted); width: 22px; text-align: right; }
-.row.q { grid-template-columns: 22px 84px minmax(0,1fr) auto; }
-
-/* Local */
-.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 28px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--panel); }
-.drop.over { border-color: var(--accent); background: var(--accent-soft); }
-.drop svg.i { width: 34px; height: 34px; color: var(--accent); }
-
-/* IPTV */
-.iptv-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.search { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 38px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
-.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.fchip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; color: var(--muted); }
-.fchip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-.channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; padding: 16px; }
-.ch { text-align: left; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-2); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-.ch:hover { border-color: var(--accent); }
-.ch .thumb { width: 100%; border-radius: 0; font-size: 17px; }
-.ch .cm { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ch .cm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ch .cm span { font: 11px/1.3 var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-textarea { width: 100%; min-height: 140px; resize: vertical; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font: 12.5px/1.5 var(--f-mono); }
-details.import { border-top: 1px solid var(--line); }
-details.import summary { padding: 12px 16px; cursor: pointer; font-weight: 600; }
-details.import .body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
-
-/* Settings */
-.set { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--line); }
-.set:first-of-type { border-top: 0; }
-.set b { display: block; }
-.set span { color: var(--muted); font-size: 13.5px; }
-.set select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
-.switch { position: relative; width: 44px; height: 26px; flex: none; }
-.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; pointer-events: none; }
-.switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
-.switch input:checked + i { background: var(--accent); }
-.switch input:checked + i::after { transform: translateX(18px); }
-.switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* YouTube player: one persistent iframe host laid over the TV screen (moving an iframe reloads it) */
-#ytHost { position: fixed; z-index: 5; left: -9999px; top: 0; width: 320px; height: 180px; visibility: hidden; border-radius: 6px; overflow: hidden; background: #000; }
-#ytHost iframe { width: 100%; height: 100%; border: 0; display: block; }
-.top, .nav { position: relative; z-index: 6; }
-.yt-tv { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
-.yt-tv h2 { margin: 0; font: 700 15px/1.3 var(--f-body); }
-.yt-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-.yt-opts > div { padding: 12px 14px; border-radius: 8px; background: var(--panel-2); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--muted); min-width: 0; }
-.yt-opts b { color: var(--fg); font-size: 14px; }
-.yt-opts .btn { align-self: flex-start; }
-a.btn { text-decoration: none; }
-
-/* Today (Gemini quick access) */
-.gem-btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-weight: 600; font-size: 14px; }
-.gem-btn svg.i { color: var(--accent); }
-.gem-btn:hover { background: var(--panel-2); }
-.ask { display: flex; gap: 8px; padding: 10px; }
-.ask .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 46px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
-.ask .field:focus-within { border-color: var(--accent); }
-.ask input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 15px; }
-.ask .field svg.i { color: var(--accent); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-.tile { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); text-align: left; text-decoration: none; color: var(--fg); min-width: 0; }
-.tile:hover { border-color: var(--accent); }
-.tile[aria-busy="true"] { border-color: var(--accent); background: var(--accent-soft); }
-.tile svg.i { width: 24px; height: 24px; color: var(--accent); margin-bottom: 4px; }
-.tile b { font-size: 15px; }
-.tile span { font-size: 12.5px; color: var(--muted); }
-.answer { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
-.answer .md { font-size: 15px; line-height: 1.6; max-width: 70ch; overflow-wrap: anywhere; }
-.answer .md h3 { margin: 10px 0 4px; font: 700 16px/1.3 var(--f-body); }
-.answer .md ul { margin: 4px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
-.answer .md p { margin: 4px 0; }
-.answer .md a, .sources a { color: var(--accent); }
-.sources { display: flex; flex-wrap: wrap; gap: 6px; }
-.sources a { font: 12px/1.4 var(--f-mono); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.loading { display: flex; align-items: center; gap: 10px; color: var(--muted); }
-.loading i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+/* Sections */
+.seg { display: inline-flex; padding: 5px; gap: 4px; border-radius: 999px; box-shadow: var(--inset); align-self: flex-start; }
+.seg button { min-height: 36px; padding: 0 16px; border-radius: 999px; font: 500 11px/1 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--bg); box-shadow: var(--raise-sm); color: var(--accent); }
+.chips { display: flex; gap: 10px; overflow-x: auto; padding: 6px 4px 10px; margin: 0 -4px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; min-height: 34px; padding: 0 14px; border-radius: 999px; background: var(--bg); box-shadow: var(--raise-sm); font: 500 10.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.chip[aria-pressed="true"] { box-shadow: var(--inset-sm); color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; border-radius: 24px; background: var(--bg); box-shadow: var(--raise-sm); text-align: left; text-decoration: none; color: var(--fg); min-width: 0; }
+.tile:active, .tile[aria-busy="true"] { box-shadow: var(--inset-sm); }
+.tile svg.i { color: var(--accent); }
+.tile b { font-weight: 400; font-size: 15px; }
+.answer { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
+.md { font-size: 15.5px; line-height: 1.65; max-width: 68ch; overflow-wrap: anywhere; font-weight: 300; }
+.md b { font-weight: 500; }
+.md h3 { margin: 10px 0 2px; font: 500 12px/1.3 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; }
+.md ul { margin: 4px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.md p { margin: 4px 0; }
+.md a, .sources a { color: var(--accent); }
+.sources { display: flex; flex-wrap: wrap; gap: 8px; }
+.sources a { font: 400 11px/1.4 var(--f-mono); padding: 5px 10px; border-radius: 999px; box-shadow: var(--raise-sm); text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--faint); border-top-color: var(--accent); animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.mode { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
-.mode .dot { display: inline-block; vertical-align: middle; margin-right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.mode .dot.on { background: var(--ok); }
-.where { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.where input { width: 180px; max-width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
+.drop { border-radius: 26px; box-shadow: var(--inset); padding: 34px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--muted); }
+.drop.over { box-shadow: var(--inset), 0 0 0 2px var(--accent); }
+.set { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 20px; }
+.set + .set { border-top: 1px solid var(--line); }
+.set .sub { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+.set .field { min-height: 40px; width: min(220px, 42vw); }
+.set select { border: 0; outline: none; background: transparent; font: 500 12px var(--f-mono); letter-spacing: .06em; padding: 10px 14px; border-radius: 999px; box-shadow: var(--raise-sm); }
+.switch { position: relative; width: 58px; height: 32px; flex: none; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; box-shadow: var(--inset); background: var(--bg); pointer-events: none; }
+.switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 26px; height: 26px; border-radius: 50%; background: var(--bg); box-shadow: 3px 3px 7px var(--lo), -2px -2px 5px var(--hi); transition: transform .18s; }
+.switch input:checked + i::after { transform: translateX(26px); background: var(--accent); box-shadow: 2px 2px 6px var(--lo); }
+.switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 3px; }
+details.more summary { list-style: none; cursor: pointer; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::after { content: "+"; font: 300 22px/1 var(--f-ui); color: var(--muted); }
+details.more[open] summary::after { content: "–"; }
+details.more .body { padding: 0 20px 18px; display: flex; flex-direction: column; gap: 12px; }
+.steps { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+.steps b { color: var(--fg); font-weight: 400; }
+code { font: 12px/1.5 var(--f-mono); overflow-wrap: anywhere; }
+kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-shadow: var(--raise-sm); }
+.big-go { align-self: center; width: 150px; height: 150px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--bg); box-shadow: var(--raise); color: var(--accent); }
+.big-go:active, .big-go.on { box-shadow: var(--inset); }
+.big-go svg.i { width: 34px; height: 34px; }
+.big-go.on { color: var(--warm); }
 
-/* VLC */
-.chip.vlc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.vlc-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: 13.5px; }
-.vlc-steps b { color: var(--fg); font-weight: 600; }
-.vlc-steps code, .sheet code { font: 12px/1.5 var(--f-mono); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); color: var(--fg); overflow-wrap: anywhere; }
-.bridge { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.bridge input { flex: 1; min-width: 200px; height: 38px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font: 13px var(--f-mono); }
-.sheet .opt { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
-.sheet .opt b { color: var(--fg); font-size: 14.5px; }
-.sheet .opt .actions { flex-wrap: wrap; }
-
-/* Mirror */
-.mirror { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
-.screen video.mv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-.mirror-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 6%; text-align: center; color: #c9d2df; background: radial-gradient(circle at 50% 40%, #1d2633, #05070a 70%); }
-.mirror-idle svg.i { width: 40px; height: 40px; color: #8d98aa; }
-.mirror-idle b { color: #fff; font: 700 17px/1.3 var(--f-body); }
-.mirror-idle span { font-size: 13px; max-width: 40ch; }
-.rec-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--bad); animation: blink 1.4s ease-in-out infinite; }
-@keyframes blink { 50% { opacity: .3; } }
-.status { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; }
-.status.live { color: var(--bad); }
-.status.ready { color: var(--muted); }
-.notice.bad { border-left-color: var(--bad); }
-.guide { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
-.guide article { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.guide article.yours { border-color: var(--accent); }
-.guide h3 { margin: 0; display: flex; align-items: center; gap: 8px; font: 700 15px/1.3 var(--f-body); }
-.guide h3 .chip { margin-left: auto; color: var(--accent); border-color: var(--accent); }
-.guide ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13.5px; }
-.guide ol b { color: var(--fg); font-weight: 600; }
-.guide .works { font: 11.5px/1.45 var(--f-mono); color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
-kbd { font: 600 11.5px/1 var(--f-mono); padding: 2px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--panel-2); color: var(--fg); }
-
-/* Mini remote */
-.mini { grid-area: mini; z-index: 6; display: flex; align-items: center; gap: 14px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-top: 1px solid var(--line); background: var(--panel); position: relative; }
-.mini .bar { position: absolute; left: 0; right: 0; top: -1px; height: 3px; background: var(--line); }
-.mini .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
-.mini .thumb { width: 64px; cursor: pointer; }
-.mini .thumb .dur { display: none; }
+/* Mini player */
+.mini { position: fixed; z-index: 6; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100% - 2 * max(18px, env(safe-area-inset-left, 0px)))); display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 10px; border-radius: 999px; background: var(--bg); box-shadow: var(--raise); }
+.mini .thumb { width: 44px; height: 44px; border-radius: 50%; }
 .mini .meta { flex: 1; cursor: pointer; }
-.mini .meta .s { margin-top: 1px; }
-.mini .ctl { display: flex; gap: 4px; align-items: center; }
-.mini .ctl .play { background: var(--accent); color: var(--accent-ink); }
-.mini .ctl .play:hover { background: var(--accent); filter: brightness(1.06); }
+.mini .meta .t { font-size: 14.5px; }
+.mini .ring { position: relative; }
+.mini .ring svg { position: absolute; inset: -3px; width: 50px; height: 50px; transform: rotate(-90deg); pointer-events: none; }
+.mini .ring circle { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
 
-/* Device sheet */
-.scrim { position: fixed; inset: 0; background: rgba(5,8,12,.55); display: grid; place-items: center; padding: 16px; z-index: 40; }
-.sheet { width: min(460px, 100%); max-height: calc(100% - 32px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
-.sheet header { display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; }
-.sheet header h2 { margin: 0; font: 800 20px/1.2 var(--f-display); flex: 1; }
-.scan { display: flex; align-items: center; gap: 10px; padding: 0 16px 12px; color: var(--muted); font-size: 13px; }
-.radar { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); position: relative; }
-.radar.on::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--accent); animation: ping 1.2s ease-out infinite; }
-@keyframes ping { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
-.dev { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
-.dev:hover { background: var(--panel-2); }
-.dev .ico { width: 40px; height: 40px; border-radius: 10px; background: var(--panel-2); display: grid; place-items: center; flex: none; }
-.dev.on .ico { background: var(--accent); color: var(--accent-ink); }
+/* Sheets */
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(40, 44, 52, .28); display: flex; align-items: flex-end; justify-content: center; }
+.sheet { width: min(520px, 100%); max-height: 86%; overflow-y: auto; background: var(--bg); border-radius: 30px 30px 0 0; box-shadow: var(--raise); padding: 10px 0 calc(18px + env(safe-area-inset-bottom, 0px)); }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--faint); margin: 4px auto 6px; }
+.sheet header { display: flex; align-items: center; gap: 12px; padding: 8px 20px 4px; }
+.sheet header .grow { flex: 1; }
+.scan { display: flex; align-items: center; gap: 12px; padding: 8px 20px 12px; font-size: 13.5px; color: var(--muted); }
+.radar { position: relative; width: 22px; height: 22px; flex: none; border-radius: 50%; box-shadow: var(--inset-sm); }
+.radar::before, .radar::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--accent); }
+.radar.on::after { inset: -4px; background: none; border: 1px solid var(--accent); animation: ping 1.4s ease-out infinite; }
+@keyframes ping { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
+.dev { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 20px; text-align: left; }
+.dev + .dev { border-top: 1px solid var(--line); }
+.dev .round { width: 46px; height: 46px; }
 .dev .dm { flex: 1; min-width: 0; }
-.dev .dm b { display: block; }
-.dev .dm span { font-size: 12.5px; color: var(--muted); }
-.dev .state { font: 600 11px/1 var(--f-mono); color: var(--accent); }
-.sheet footer { padding: 12px 16px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.dev .dm b { display: block; font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dev .dm span { font: 400 10.5px/1.4 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.dev.on .round { box-shadow: var(--inset-sm); color: var(--accent); }
+.dev .state { font: 500 10px/1 var(--f-mono); letter-spacing: .14em; color: var(--accent); }
+.sheet-note { margin: 6px 20px 0; }
+.sheet footer { display: flex; gap: 10px; padding: 16px 20px 0; flex-wrap: wrap; }
+.sheet .opt { padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: var(--muted); }
+.sheet .opt + .opt { border-top: 1px solid var(--line); }
+.sheet .opt b { color: var(--fg); font-weight: 400; font-size: 15px; }
+.toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); padding: 12px 20px; border-radius: 999px; background: var(--bg); box-shadow: var(--raise); font-size: 14px; text-align: center; }
 
-.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 8px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 14px; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
-
-@media (max-width: 860px) {
-  .np, .mirror { grid-template-columns: minmax(0,1fr); }
+@media (min-width: 900px) {
+  .grid { gap: 28px 18px; }
 }
-@media (max-width: 760px) {
-  .gem-btn span { display: none; }
-  .app { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto auto; grid-template-areas: "top" "main" "mini" "nav"; }
-  .nav { flex-direction: row; border-right: 0; border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); overflow-x: auto; gap: 0; }
-  .nav button { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 11px; flex: 1 0 auto; }
-  .nav .badge, .nav .sep { display: none; }
-  .brand .name-long { display: none; }
-  .row { grid-template-columns: 64px minmax(0,1fr); }
-  .row .thumb { width: 64px; }
-  .row .actions { grid-column: 1 / -1; justify-content: flex-end; }
-  .row.q { grid-template-columns: 18px 64px minmax(0,1fr); }
-  .mini .ctl .hide-sm { display: none; }
-  .mini .thumb { display: none; }
-  .toast { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
-}
-@media (max-width: 430px) { .cast-btn span { display: none; } .cast-btn { padding: 8px; } }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 <!-- HEAD-END -->
@@ -359,20 +263,21 @@ kbd { font: 600 11.5px/1 var(--f-mono); padding: 2px 5px; border: 1px solid var(
   <defs>
     <symbol id="i-cast" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a8 8 0 0 1 8 8"/><path d="M2 16a4 4 0 0 1 4 4"/><path d="M2 20h.01"/></symbol>
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
-    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/></symbol>
-    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5.5v13M15 5.5v13"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
     <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></symbol>
-    <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 5l10 7-10 7z" fill="currentColor" stroke="none"/><path d="M19 5v14"/></symbol>
-    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 6l9 6-9 6z"/><path d="M18 6v12"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M18 15v6M15 18h6"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
     <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8M9 2l3 4 3-4"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
-    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
     <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
     <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
@@ -382,8 +287,6 @@ kbd { font: 600 11.5px/1 var(--f-mono); padding: 2px 5px; border: 1px solid var(
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
     <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
     <symbol id="i-chrome" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.5M9 13.8L4.8 6.3M15 13.8l-4.3 7.2"/></symbol>
-    <symbol id="i-roku" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="3"/><circle cx="17" cy="12" r="1.5"/></symbol>
-    <symbol id="i-fire" viewBox="0 0 24 24"><rect x="8" y="2.5" width="8" height="19" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M10.5 13h3M10.5 16h3"/></symbol>
     <symbol id="i-dlna" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4M8 10h2l2-3 2 6 2-3h1"/></symbol>
     <symbol id="i-air" viewBox="0 0 24 24"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="M12 15l5 6H7z"/></symbol>
     <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
@@ -391,49 +294,25 @@ kbd { font: 600 11.5px/1 var(--f-mono); padding: 2px 5px; border: 1px solid var(
     <symbol id="i-mirror" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M9 10.5l3-3 3 3M12 7.5v6"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3c.6 4.6 3.4 7.4 9 9-5.6 1.6-8.4 4.4-9 9-.6-4.6-3.4-7.4-9-9 5.6-1.6 8.4-4.4 9-9z"/></symbol>
     <symbol id="i-news" viewBox="0 0 24 24"><rect x="3" y="4" width="15" height="16" rx="2"/><path d="M18 8h3v10a2 2 0 0 1-2 2M7 8h7M7 12h7M7 16h4"/></symbol>
-    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 1 1 .9-8.9A6 6 0 0 1 19 11a3.5 3.5 0 0 1-.5 7z"/><path d="M5 4.5l1 1M10 2.5v1.5"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 1 1 .9-8.9A6 6 0 0 1 19 11a3.5 3.5 0 0 1-.5 7z"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
-    <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 5h-5L8 10z"/><path d="M12 3v4M21 11l-5-1M17.5 19l-3-4M6.5 19l3-4M3 11l5-1"/></symbol>
-    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/><path d="M15 6h4v4"/></symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 5h-5L8 10z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/></symbol>
     <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
-    <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3zM7 11h10"/><circle cx="7.5" cy="19" r="1"/><circle cx="16.5" cy="19" r="1"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3zM7 11h10"/></symbol>
     <symbol id="i-speak" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
     <symbol id="i-vlc" viewBox="0 0 24 24"><path d="M10.2 3h3.6l5.2 15H5z"/><path d="M8 11.5h8M6.8 15h10.4"/><path d="M3 21h18"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-4M4 4v4h4M4 13a8 8 0 0 0 14.8 4M20 20v-4h-4"/></symbol>
+    <symbol id="i-lib" viewBox="0 0 24 24"><path d="M5 4v16M10 4v16M15 4.5l4 15"/></symbol>
   </defs>
 </svg>
 
 <div class="app" id="app">
-  <header class="top">
-    <div class="brand"><span class="mark"><svg class="i"><use href="#i-cast"/></svg></span><span>StreamBeam<span class="name-long muted" style="font-weight:600"> Caster</span></span></div>
-    <div class="spacer"></div>
-    <button class="gem-btn" data-act="openToday" title="Ask Gemini (G)" aria-label="Ask Gemini"><svg class="i"><use href="#i-spark"/></svg><span>Ask Gemini</span></button>
-    <button class="icon-btn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme"><svg class="i"><use href="#i-sun"/></svg></button>
-    <button class="cast-btn" id="castBtn" aria-haspopup="dialog"><svg class="i"><use href="#i-cast"/></svg><span id="castLabel">Not connected</span></button>
-  </header>
-
-  <nav class="nav" id="nav" aria-label="Sections">
-    <button data-view="today"><svg class="i"><use href="#i-spark"/></svg>Today</button>
-    <button data-view="browser"><svg class="i"><use href="#i-globe"/></svg>Browser</button>
-    <button data-view="player"><svg class="i"><use href="#i-cast"/></svg>Remote</button>
-    <button data-view="mirror"><svg class="i"><use href="#i-mirror"/></svg>Mirror</button>
-    <button data-view="queue"><svg class="i"><use href="#i-list"/></svg>Queue<span class="badge" id="qBadge">0</span></button>
-    <div class="sep"></div>
-    <button data-view="local"><svg class="i"><use href="#i-folder"/></svg>Local files</button>
-    <button data-view="iptv"><svg class="i"><use href="#i-tv"/></svg>IPTV</button>
-    <button data-view="bookmarks"><svg class="i"><use href="#i-star"/></svg>Bookmarks</button>
-    <button data-view="history"><svg class="i"><use href="#i-clock"/></svg>History</button>
-    <div class="sep"></div>
-    <button data-view="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</button>
-  </nav>
-
   <main class="main" id="main"></main>
-
-  <footer class="mini" id="mini" aria-label="Now casting"></footer>
+  <div class="mini" id="mini" hidden></div>
 </div>
 
 <video id="video" playsinline crossorigin="anonymous" hidden></video>
-<style>body > video { display: none; }</style>
 <input type="file" id="subFile" accept=".srt,.vtt" hidden>
 <div class="scrim" id="scrim" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -542,40 +421,34 @@ https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_
 #EXTINF:-1 tvg-id="envivio" group-title="Test signals",DASH Test Signal
 https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd`;
 
-const DEVICES = [
-  { id: 'remote', name: 'Nearby screen', kind: 'Browser Remote Playback', icon: 'chrome', real: true },
-  { id: 'vlc', name: 'VLC media player', kind: 'VLC on a computer · via StreamBeam bridge', icon: 'vlc', real: true },
-  { id: 'cc-living', name: 'Living Room TV', kind: 'Chromecast · 192.168.1.24', icon: 'cast' },
-  { id: 'roku', name: 'Bedroom Roku', kind: 'Roku Ultra · 192.168.1.31', icon: 'roku' },
-  { id: 'fire', name: 'Office Fire TV', kind: 'Fire TV Stick 4K · 192.168.1.40', icon: 'fire' },
-  { id: 'dlna', name: 'Samsung Q80 (DLNA)', kind: 'UPnP/DLNA renderer · 192.168.1.52', icon: 'dlna' },
-  { id: 'airplay', name: 'Kitchen Apple TV', kind: 'AirPlay · 192.168.1.61', icon: 'air' }
+/* Simulated screens for trying the app (Settings → Demo screens); real ones come from the Android app */
+const DEMO = [
+  { id: 'demo-cast', name: 'Living room TV', kind: 'Google Cast', icon: 'cast' },
+  { id: 'demo-dlna', name: 'Bedroom TV', kind: 'DLNA', icon: 'dlna' },
+  { id: 'demo-car', name: 'Car screen', kind: 'DLNA', icon: 'car' }
 ];
 
 /* ---------- State ---------- */
 const S = {
-  view: 'player',
-  url: SITES[0].url,
-  detected: SITES[0].media.map(m => ({ ...m, id: uid(), source: SITES[0].name })),
+  view: 'home',
+  libTab: 'history',
+  url: '',
+  detected: [],
   notice: null,
   device: store.get('device', ''),
-  queue: store.get('queue', null),
-  history: store.get('history', null),
-  bookmarks: store.get('bookmarks', null),
+  deviceName: store.get('deviceName', ''),
+  queue: store.get('queue', []),
+  history: store.get('history', []),
+  bookmarks: store.get('bookmarks', []),
   m3u: store.get('m3u', SAMPLE_M3U),
   group: 'All', chSearch: '',
   local: [],
   settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
   scanning: false
 };
-if (S.device && S.device !== 'local' && !S.settings.demo && !DEVICES.find(d => d.id === S.device)?.real) S.device = '';
-if (!S.queue) S.queue = [SITES[0].media[1], SITES[1].media[0]].map(m => ({ ...m, id: uid() }));
-if (!S.history) S.history = [
-  { ...SITES[0].media[3], id: uid(), at: Date.now() - 864e5 * 1.2, pos: 412 },
-  { ...SITES[2].media[2], id: uid(), at: Date.now() - 864e5 * 2.6, pos: 60 }
-];
-if (!S.bookmarks) S.bookmarks = SITES.slice(0, 2).map(s => ({ id: uid(), title: s.name, url: s.url }));
-const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'm3u'].forEach(k => store.set(k, S[k])); };
+/* Devices saved by older versions (fixed demo ids) or demo screens after demo mode is off */
+if (/^(cc-living|roku|fire|dlna|airplay)$/.test(S.device) || (S.device.startsWith('demo-') && !S.settings.demo)) S.device = '';
+const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'deviceName', 'm3u'].forEach(k => store.set(k, S[k])); };
 
 /* ---------- Playback engine ---------- */
 const video = $('#video');
@@ -583,7 +456,7 @@ let hls = null;
 const P = { item: null, playing: false, pos: 0, dur: 0, live: false, vol: .8, muted: false, rate: 1, real: false, subs: null, subName: '', yt: null, ytState: '' };
 
 /* YouTube runs in the official IFrame Player, driven by the same remote controls */
-const ytHost = document.createElement('div'); ytHost.id = 'ytHost'; ytHost.innerHTML = '<div id="ytInner"></div>';
+const ytHost = document.createElement('div'); ytHost.className = 'yt-host'; ytHost.innerHTML = '<div id="ytInner"></div>';
 const Y = { api: null, player: null, ready: false, key: '' };
 const ytOn = () => P.yt && Y.ready && Y.key === P.item?.url;
 function ytApi() {
@@ -660,7 +533,7 @@ function load(item, startAt = 0) {
   if (hls) { hls.destroy(); hls = null; }
   video.removeAttribute('src'); video.load();
   P.yt = ytParse(item.url); P.ytState = ''; P.vidErr = false;
-  P.ext = S.device === 'vlc' && canVlc(item.url) ? 'vlc' : '';
+  P.ext = S.device === 'vlc' && canVlc(item.url) ? 'vlc' : S.device.startsWith('n:') && castable(item.url) ? 'native' : '';
   if (P.ext) { P.yt = null; if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} } Y.key = ''; if (!P.pos && item.start) P.pos = item.start; return; }
   if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} }
   Y.key = '';
@@ -712,7 +585,7 @@ async function vlcConnect(quiet) {
 }
 const vlcFail = e => { V.ok = false; V.err = e instanceof TypeError ? `Lost the connection to the bridge at ${vlcBase()}.` : e.message; toast('VLC didn’t respond'); render(); };
 async function vlcPlay(item, start) {
-  if (!V.ok && !(await vlcConnect(true))) { P.playing = false; S.view = 'player'; render(); return; }
+  if (!V.ok && !(await vlcConnect(true))) { P.playing = false; setView('player'); render(); return; }
   try {
     await vlc('in_play', { input: item.url, ...(start > 1 ? { option: 'start-time=' + Math.floor(start) } : {}) });
     await vlc('volume', { val: Math.round((P.muted ? 0 : P.vol) * 256) });
@@ -733,7 +606,6 @@ setInterval(async () => {
     if (playing !== P.playing) { P.playing = playing; tick(true); } else tick();
   } catch (e) { if (V.ok) vlcFail(e); }
 }, 1000);
-const send = (cmd, params) => vlcOn() && vlc(cmd, params).catch(vlcFail);
 
 /* Open in the VLC app (phones) or desktop VLC (.m3u playlist / Open Network Stream) */
 const isAndroid = /Android/i.test(navigator.userAgent), isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -752,25 +624,21 @@ function saveM3u(items, name) {
     a.download = name.replace(/[^\w .-]+/g, '').trim().slice(0, 60) + '.m3u';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    toast('Open the downloaded .m3u with VLC. No download? Use Copy link.');
+    toast('Open the .m3u file with VLC');
   } catch { toast('Saving isn’t allowed here. Copy the link instead.'); }
 }
 let vlcSheetItem = null;
 function openVlcSheet(item) {
-  vlcSheetItem = item;
+  vlcSheetItem = item; sheetKind = 'vlc';
   const app = vlcAppLink(item.url, item.title);
-  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vlcTitle">
-    <header><h2 id="vlcTitle">Open in VLC</h2><button class="icon-btn" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
-    <div class="scan" style="display:block"><b style="color:var(--fg)">${esc(item.title)}</b><br><code>${esc(item.url)}</code></div>
-    ${app ? `<div class="opt"><b>VLC app on this ${isIOS ? 'iPhone or iPad' : 'phone'}</b>Plays it in VLC, which handles almost every format. Install VLC first if you don’t have it.
-      <span class="actions"><a class="btn primary sm" href="${esc(app)}">${icon('vlc')}Open in VLC</a></span></div>` : ''}
-    <div class="opt"><b>VLC on this computer</b>Save a playlist and open it with VLC, or in VLC choose Media → Open Network Stream (<kbd>Ctrl</kbd> + <kbd>N</kbd>, <kbd>⌘</kbd> + <kbd>N</kbd> on Mac) and paste the link.
-      <span class="actions"><button class="btn sm" data-act="vlcM3u">${icon('upload')}Save .m3u playlist</button><button class="btn sm" data-act="vlcCopy">${icon('copy')}Copy link</button></span></div>
-    <div class="opt"><b>Cast to VLC</b>Send it to VLC on a computer connected to your TV and use this app as the remote.
-      <span class="actions"><button class="btn sm" data-act="vlcSend">${icon('cast')}Cast to VLC</button></span></div>
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Open in VLC"><div class="grab"></div>
+    <header><span class="label grow">Open in VLC</span><button class="round sm" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
+    <div class="opt"><b>${esc(item.title)}</b></div>
+    ${app ? `<div class="opt"><div class="acts"><a class="btn sm acc" href="${esc(app)}">${icon('vlc')}VLC app</a></div></div>` : ''}
+    <div class="opt">On a computer: VLC → Media → Open Network Stream, paste the link.<div class="acts"><button class="btn sm" data-act="vlcCopy">${icon('copy')}Copy link</button><button class="btn sm" data-act="vlcM3u">${icon('upload')}Playlist</button></div></div>
+    ${vlcAvail() ? `<div class="opt"><div class="acts"><button class="btn sm" data-act="vlcSend">${icon('cast')}Cast to VLC</button></div></div>` : ''}
   </div>`;
   scrim.hidden = false;
-  scrim.querySelector('.sheet button, .sheet a')?.focus();
 }
 video.addEventListener('ended', () => onEnded());
 
@@ -783,21 +651,20 @@ function playItem(item, opts = {}) {
   if (P.real) video.play().catch(() => {});
   if (P.yt) ytLoad(it, P.pos);
   if (vlcOn()) vlcPlay(it, P.pos);
-  else if (S.device === 'vlc') toast('VLC can’t open files from the browser. Playing here instead.');
+  else if (nativeOn()) nativePlay(it, P.pos);
+  else if (S.device === 'vlc') toast('VLC can’t open this. Playing here.');
+  else if (S.device.startsWith('n:')) toast(P.yt ? 'YouTube plays here. Use Open in YouTube to cast it.' : 'This plays here, not on the screen.');
   logHistory();
-  if (!S.device) { openDevices(); toast('Choose a screen to cast to'); }
-  else if (S.device === 'local') toast(`Playing “${it.title}”`);
-  else if (S.device !== 'vlc' || vlcOn()) toast(`Casting “${it.title}” to ${devName()}`);
+  if (!S.device) openDevices();
   if (S.device === 'remote' && !P.yt) promptRemote();
-  S.view = 'player';
-  render();
+  if (S.view === 'player') render(); else go('player');
 }
 function toggle() {
   if (!P.item) return;
   P.playing = !P.playing;
   if (P.real) P.playing ? video.play().catch(() => {}) : video.pause();
   if (ytOn()) P.playing ? Y.player.playVideo() : Y.player.pauseVideo();
-  send(P.playing ? 'pl_forceresume' : 'pl_forcepause');
+  extCmd(P.playing ? 'resume' : 'pause');
   tick(true);
 }
 function seek(t) {
@@ -805,7 +672,7 @@ function seek(t) {
   P.pos = Math.max(0, Math.min(P.dur || 0, t));
   if (P.real) video.currentTime = P.pos;
   if (ytOn()) Y.player.seekTo(P.pos, true);
-  send('seek', { val: Math.floor(P.pos) });
+  extCmd('seek', P.pos);
   tick(true);
 }
 function stop() {
@@ -815,7 +682,7 @@ function stop() {
   video.pause(); video.removeAttribute('src'); video.load();
   if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} }
   P.yt = null; Y.key = '';
-  send('pl_stop'); P.ext = '';
+  extCmd('stop'); P.ext = '';
   render();
 }
 function next() {
@@ -840,6 +707,7 @@ setInterval(() => {
   else if (ytOn()) { P.pos = Y.player.getCurrentTime() || 0; const d = Y.player.getDuration(); if (d && !P.live) P.dur = d; }
   else if (P.yt && P.ytState !== 'blocked') { /* waiting on YouTube */ }
   else if (vlcOn()) { if (V.ok) P.pos = Math.min(P.dur || Infinity, P.pos + .25 * P.rate); }
+  else if (nativeOn()) { P.pos = Math.min(P.dur || Infinity, P.pos + .25 * P.rate); }
   else {
     P.pos += .25 * P.rate;
     if (!P.live && P.dur && P.pos >= P.dur) { P.pos = P.dur; onEnded(); return; }
@@ -866,8 +734,9 @@ $('#subFile').addEventListener('change', async e => {
 
 /* Browser Remote Playback API: real casting to Chromecast / AirPlay where the browser supports it */
 function promptRemote() {
-  if (!video.remote || !video.src) { toast('This browser can’t reach nearby screens. Pick another device.'); return; }
-  video.remote.prompt().catch(err => toast(err.name === 'NotSupportedError' ? 'This video can’t be sent to a nearby screen' : 'No screen selected'));
+  if (!video.remote) { toast('This browser can’t cast. Try Chrome.'); return; }
+  if (!video.getAttribute('src')) { toast('Play a video, then pick Nearby screen again.'); return; }
+  video.remote.prompt().catch(err => toast(err.name === 'NotSupportedError' ? 'This video can’t be cast from the browser' : 'No screen picked'));
 }
 
 /* ---------- Screen mirroring ----------
@@ -882,8 +751,9 @@ const saveMirror = () => store.set('mirror', { surface: M.surface, quality: M.qu
 
 async function startMirror() {
   M.error = null;
+  if (N.on) { ncall('openCastSettings').catch(e => toast(e.message)); return; }
   if (!canCapture) {
-    M.error = 'This browser can’t capture the screen. Phones and tablets don’t allow it from a web page, so use the built-in mirroring steps below.';
+    M.error = 'This browser can’t share the screen. Use the steps below.';
     return render();
   }
   const h = +M.quality;
@@ -897,12 +767,11 @@ async function startMirror() {
     stream.getVideoTracks()[0].addEventListener('ended', () => stopMirror());
     mvid.srcObject = stream; mvid.play().catch(() => {});
     if (!S.device) openDevices();
-    toast(`Mirroring to ${devName()}`);
   } catch (err) {
     M.error = err.name === 'NotAllowedError'
-      ? 'Screen sharing didn’t start. Either the picker was cancelled, or this page is shown inside a frame that blocks screen capture (such as an embedded preview). Open the app directly in Chrome, Edge or Firefox, or use the built-in mirroring steps below.'
-      : err.name === 'NotFoundError' ? 'No screen, window or tab was available to share.'
-      : 'Screen sharing failed (' + err.name + '). Try a lower quality or frame rate.';
+      ? 'Sharing didn’t start. It was cancelled or this page isn’t allowed to share the screen.'
+      : err.name === 'NotFoundError' ? 'Nothing was available to share.'
+      : 'Sharing failed (' + err.name + '). Try a lower quality.';
   }
   render();
 }
@@ -910,7 +779,7 @@ function stopMirror() {
   if (!M.stream) return;
   M.stream.getTracks().forEach(t => t.stop());
   M.stream = null; mvid.srcObject = null;
-  toast('Mirroring stopped'); render();
+  render();
 }
 setInterval(() => {
   if (!M.stream) return;
@@ -942,10 +811,10 @@ const GUIDES = [
   { id: 'android', title: 'Android phone or tablet', icon: 'phone', you: PLATFORM === 'android',
     steps: ['Swipe down twice to open <b>Quick Settings</b>', 'Tap <b>Screen Cast</b>, <b>Cast</b> or <b>Smart View</b> (Samsung)', 'Choose your TV. Or use the Google Home app → your device → <b>Cast my screen</b>'],
     works: 'Chromecast, Google TV, Samsung and other Miracast TVs' },
-  { id: 'roku', title: 'Get a Roku ready', icon: 'roku', you: false,
+  { id: 'roku', title: 'Get a Roku ready', icon: 'tv', you: false,
     steps: ['On the Roku: <b>Settings</b> → <b>System</b> → <b>Screen mirroring</b>', 'Set mode to <b>Prompt</b> or <b>Always allow</b>', 'Mirror from Windows (<kbd>Win</kbd> + <kbd>K</kbd>), Android, or AirPlay'],
     works: 'Roku players and Roku TVs' },
-  { id: 'fire', title: 'Get a Fire TV ready', icon: 'fire', you: false,
+  { id: 'fire', title: 'Get a Fire TV ready', icon: 'tv', you: false,
     steps: ['Press and hold <b>Home</b> on the remote', 'Select <b>Mirroring</b>', 'Mirror from Windows (<kbd>Win</kbd> + <kbd>K</kbd>) or Android'],
     works: 'Fire TV Stick, Fire TV Cube, Fire TV Edition TVs' }
 ].sort((a, b) => b.you - a.you);
@@ -1015,10 +884,10 @@ async function gemini(prompt) {
 }
 async function ask(tile, custom) {
   const t = tile && TILES.find(x => x.id === tile);
-  if (t?.needsPlace && !place()) { GM.err = 'Set your city first, or tap “Use my location”.'; GM.answer = null; S.view = 'today'; render(); $('#tCity')?.focus(); return; }
+  if (t?.needsPlace && !place()) { GM.err = 'Type your city or tap Locate first.'; GM.answer = null; setView('today'); render(); $('#tCity')?.focus(); return; }
   const prompt = t ? t.prompt() : `Today is ${todayStr()}${place() ? ' and I am in ' + place() : ''}. ${custom}`;
   const label = t ? t.label : custom;
-  S.view = 'today'; GM.err = '';
+  setView('today'); GM.err = '';
   if (!geminiReady()) { GM.answer = null; render(); return; }
   GM.busy = t ? t.id : 'custom'; GM.answer = { label, prompt, text: '', sources: [] }; render();
   try { Object.assign(GM.answer, await gemini(prompt), { at: Date.now() }); }
@@ -1058,24 +927,24 @@ async function browse(raw) {
   if (!/^[a-z]+:/i.test(url)) url = (/\s/.test(url) || !/\./.test(url)) ? 'https://duckduckgo.com/?q=' + encodeURIComponent(url) : 'https://' + url;
   S.url = url; S.notice = null;
   const site = SITES.find(s => s.url === url);
-  if (site) { S.detected = site.media.map(m => ({ ...m, id: uid(), source: site.name })); S.notice = { ok: true, text: site.id === 'youtube' ? 'Paste a YouTube link above, or cast one of these.' : `Found ${site.media.length} videos on this page.` }; return render(); }
+  if (site) { S.detected = site.media.map(m => ({ ...m, id: uid(), source: site.name })); S.notice = null; return render(); }
   if (ytParse(url)) {
     const it = ytItem(url); S.detected = [it];
-    S.notice = { ok: true, text: ytParse(url).id ? 'YouTube video. Ready to cast.' : 'YouTube playlist. Ready to cast.' };
+    S.notice = null;
     render(); ytTitle(it); return;
   }
   if (/(^|\.)(youtube\.com|youtu\.be)$/i.test(new URL(url).hostname)) {
-    S.detected = []; S.notice = { text: 'Open a video on YouTube, tap Share → Copy link, and paste the link here.', link: url }; return render();
+    S.detected = []; S.notice = { text: 'Paste a YouTube video link (Share → Copy link).', link: url }; return render();
   }
   if (fmtOf(url) !== 'MP4' || /\.(mp4|m4v)(\?|$)/i.test(url)) {
     if (/\.(mp4|m4v|webm|mov|mkv|avi|flv|wmv|ts|m3u8|mpd|mp3|m4a)(\?|$)/i.test(url)) {
       const name = decodeURIComponent(url.split('?')[0].split('/').pop()).replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
       S.detected = [{ id: uid(), title: name || 'Video', url, res: fmtOf(url) === 'HLS' ? 'Auto' : '—', size: '—', duration: 0, source: 'Direct link' }];
-      S.notice = { ok: true, text: 'Direct video link. Ready to cast.' };
+      S.notice = null;
       return render();
     }
   }
-  S.notice = { ok: true, text: 'Scanning page for videos…' }; render();
+  S.notice = { ok: true, text: 'Looking for videos…' }; render();
   try {
     const res = await fetch(url, { mode: 'cors' });
     const html = await res.text();
@@ -1089,10 +958,10 @@ async function browse(raw) {
     (html.match(MEDIA_RE) || []).forEach(m => { try { const h = new URL(m.startsWith('//') ? 'https:' + m : m).href; if (!found.has(h)) found.set(h, ''); } catch {} });
     S.detected = [...found].map(([u, t]) => ytParse(u) ? ytItem(u, t) : ({ id: uid(), url: u, title: t || decodeURIComponent(u.split('?')[0].split('/').pop()), res: '—', size: '—', duration: 0, source: new URL(url).hostname }));
     S.detected.filter(m => ytParse(m.url)).forEach(ytTitle);
-    S.notice = S.detected.length ? { ok: true, text: `Found ${S.detected.length} video${S.detected.length > 1 ? 's' : ''} on this page.` } : { text: 'No videos found on this page. Start the video on the site first, or paste its direct link (.mp4, .m3u8, .mpd).' };
+    S.notice = S.detected.length ? null : { ok: true, text: 'No videos on this page. Paste the video’s own link instead.' };
   } catch {
     S.detected = [];
-    S.notice = { text: 'This site doesn’t allow scanning from a web app. Open it, copy the video’s direct link (.mp4 or .m3u8) and paste it here.', link: url };
+    S.notice = { text: 'This site can’t be searched from here. Open it, copy the video link and paste it.', link: url };
   }
   render();
 }
@@ -1114,170 +983,249 @@ function parseM3U(text) {
   return out;
 }
 
+/* ---------- Native bridge (StreamBeam Android app) ----------
+   The Android app injects window.StreamBeamNative (a WebView message channel open only to this site).
+   It finds real screens on the Wi-Fi (Google Cast and DLNA/UPnP renderers over SSDP) and casts to them.
+   In a plain browser it is absent: no network search is possible there, so none is faked. */
+const NB = window.StreamBeamNative;
+const N = { on: !!NB, devices: [], scanning: false, seq: 0, wait: new Map() };
+let sheetKind = '';
+if (NB) {
+  NB.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.id && N.wait.has(m.id)) { const w = N.wait.get(m.id); N.wait.delete(m.id); m.ok ? w.res(m.result) : w.rej(new Error(m.error || 'The app couldn’t do that.')); return; }
+    if (m.event === 'devices') {
+      N.devices = m.devices || []; N.scanning = !!m.scanning;
+      if (sheetKind === 'devices') drawDevices();
+      if (S.view === 'home') updateConn();
+    } else if (m.event === 'status') onNativeStatus(m);
+    else if (m.event === 'session') onNativeSession(m);
+  };
+}
+function ncall(cmd, args = {}) {
+  if (!NB) return Promise.reject(new Error('Only in the StreamBeam app'));
+  return new Promise((res, rej) => {
+    const id = ++N.seq; N.wait.set(id, { res, rej });
+    NB.postMessage(JSON.stringify({ id, cmd, args }));
+    setTimeout(() => { if (N.wait.delete(id)) rej(new Error('The screen didn’t answer.')); }, 25000);
+  });
+}
+const nativeOn = () => P.ext === 'native';
+const castable = url => /^https?:/i.test(url) && !ytParse(url);
+const MIME = { MP4: 'video/mp4', WEBM: 'video/webm', HLS: 'application/x-mpegURL', DASH: 'application/dash+xml', MKV: 'video/x-matroska', MOV: 'video/quicktime', AVI: 'video/x-msvideo', FLV: 'video/x-flv', WMV: 'video/x-ms-wmv', TS: 'video/mp2t', AUDIO: 'audio/mpeg' };
+async function nativePlay(item, start) {
+  try {
+    await ncall('play', { deviceId: S.device.slice(2), url: item.url, title: item.title, mime: MIME[fmtOf(item.url)] || 'video/mp4', start: Math.floor(start || 0), live: !!item.live });
+  } catch (e) { nativeFail(e); }
+}
+function nativeFail(e) { toast(e.message || 'The screen didn’t respond'); P.playing = false; tick(true); }
+function onNativeStatus(m) {
+  if (!nativeOn() || !P.item) return;
+  if (m.duration > 0) { P.dur = m.duration; P.live = false; }
+  if (m.position >= 0) P.pos = m.position;
+  if (m.state === 'ended') { onEnded(); return; }
+  const playing = m.state === 'playing' || m.state === 'buffering';
+  if (playing !== P.playing) { P.playing = playing; tick(true); } else tick();
+}
+function onNativeSession(m) {
+  if (S.device !== 'n:' + m.deviceId) return;
+  if (m.state === 'ended') { if (nativeOn()) P.playing = false; toast('Disconnected from ' + devName()); render(); }
+  else if (m.state === 'failed') toast(m.error || 'Couldn’t connect to ' + devName());
+}
+/* Remote-control commands for whichever external player is active (VLC relay or a native screen) */
+function extCmd(cmd, v) {
+  if (vlcOn()) {
+    const m = { pause: ['pl_forcepause'], resume: ['pl_forceresume'], seek: ['seek', { val: Math.floor(v) }], volume: ['volume', { val: Math.round(v * 256) }], rate: ['rate', { val: v }], stop: ['pl_stop'] }[cmd];
+    if (m) vlc(...m).catch(vlcFail);
+  }
+  if (nativeOn()) ncall(cmd, { value: v ?? 0 }).catch(e => toast(e.message));
+}
+
+/* ---------- Screens ---------- */
+const vlcAvail = () => !!S.settings.vlcBridge || (location.protocol.startsWith('http') && !/github\.io$/.test(location.hostname));
+function deviceList() {
+  const list = N.devices.map(d => ({ id: 'n:' + d.id, name: d.name, kind: d.type === 'cast' ? 'Google Cast' : 'DLNA', detail: [d.model, d.host].filter(Boolean).join(' · '), icon: d.type === 'cast' ? 'cast' : 'dlna', native: true }));
+  if (!N.on && 'remote' in HTMLMediaElement.prototype) list.push({ id: 'remote', name: 'Nearby screen', kind: 'Browser cast', detail: 'Chromecast · AirPlay', icon: 'chrome' });
+  if (vlcAvail()) list.push({ id: 'vlc', name: 'VLC', kind: 'VLC on a computer', icon: 'vlc' });
+  if (S.settings.demo) list.push(...DEMO.map(d => ({ ...d, demo: true })));
+  return list;
+}
+function curDev() {
+  if (!S.device || S.device === 'local') return null;
+  return deviceList().find(d => d.id === S.device) || (S.device.startsWith('n:') ? { id: S.device, name: S.deviceName || 'Screen', kind: '', icon: 'cast', native: true, away: true } : null);
+}
+function devName() { return S.device === 'local' ? 'this device' : curDev()?.name || 'this device'; }
+
+/* ---------- Navigation: home ↔ section (one level, so Back always returns home) ---------- */
+const SECTIONS = [
+  ['browser', 'Browse', 'globe'], ['player', 'Remote', 'cast'], ['mirror', 'Mirror', 'mirror'],
+  ['queue', 'Queue', 'list'], ['local', 'Files', 'folder'], ['iptv', 'IPTV', 'tv'],
+  ['today', 'Today', 'spark'], ['library', 'Library', 'lib'], ['settings', 'Settings', 'gear']
+];
+const TITLES = Object.fromEntries(SECTIONS.map(([v, l]) => [v, l]));
+let depth = 0;
+function go(view) {
+  if (view === S.view || !(view in TITLES)) return;
+  try { if (S.view === 'home') { history.pushState({ sb: view }, '', '#' + view); depth = 1; } else history.replaceState({ sb: view }, '', '#' + view); } catch {}
+  S.view = view; render(); main.scrollTop = 0;
+}
+function setView(v) { if (S.view !== v) go(v); }
+function goHome() {
+  if (depth > 0) { history.back(); return; }
+  S.view = 'home';
+  try { history.replaceState({ sb: 'home' }, '', location.pathname + location.search); } catch {}
+  render(); main.scrollTop = 0;
+}
+addEventListener('popstate', e => { S.view = e.state?.sb || 'home'; depth = S.view === 'home' ? 0 : 1; render(); });
+
 /* ---------- Rendering ---------- */
 const main = $('#main');
 main.addEventListener('scroll', () => placeYT(), { passive: true });
-function devName() { return DEVICES.find(d => d.id === S.device)?.name || 'this device'; }
-function thumb(m, w) {
+const softBg = t => { const h = hue(t); return `background:linear-gradient(135deg,hsla(${h},45%,62%,.3),hsla(${(h + 40) % 360},40%,50%,.16))`; };
+function thumb(m) {
   const y = ytParse(m.url);
-  const img = y && y.id ? `background-image: url(https://i.ytimg.com/vi/${y.id}/mqdefault.jpg), ${poster(m.title).slice(12, -1)}; background-size: cover; background-position: center;` : poster(m.title);
-  const d = m.live ? '<span class="dur">LIVE</span>' : m.duration ? `<span class="dur">${fmt(m.duration)}</span>` : '';
-  return `<div class="thumb" style="${img}${w ? 'width:' + w : ''}">${y && y.id ? '' : esc(initials(m.title))}${d}</div>`;
+  return y && y.id
+    ? `<div class="thumb" style="background-image:url(https://i.ytimg.com/vi/${y.id}/mqdefault.jpg)"></div>`
+    : `<div class="thumb" style="${softBg(m.title)}">${esc(initials(m.title))}</div>`;
 }
 function mediaRow(m, actions, extra = '') {
-  const f = fmtOf(m.url);
-  const playing = P.item && P.item.url === m.url;
-  return `<div class="row ${playing ? 'playing' : ''}" data-id="${m.id}">${extra}${thumb(m)}
-    <div class="meta"><div class="t">${esc(m.title)}</div>
-      <div class="s"><span class="chip fmt-${f}">${f}</span>${m.live ? '<span class="chip live">LIVE</span>' : ''}${NEEDS_VLC.includes(f) ? '<span class="chip vlc">VLC</span>' : ''}${m.res && m.res !== '—' ? `<span>${esc(m.res)}</span>` : ''}${m.size && m.size !== '—' ? `<span>· ${esc(m.size)}</span>` : ''}${playing ? '<span style="color:var(--accent);font-weight:700">· Now casting</span>' : ''}</div>
-      <div class="u">${esc(m.url.startsWith('blob:') ? (m.fileName || 'Local file') : m.url)}</div></div>
-    <div class="actions">${actions}</div></div>`;
+  const f = fmtOf(m.url), on = P.item && P.item.url === m.url;
+  const tags = [f, m.live && 'LIVE', NEEDS_VLC.includes(f) && 'VLC', m.res && !/^(—|Live|video.*)$/.test(m.res) && m.res, m.duration && fmt(m.duration)].filter(Boolean);
+  return `<div class="row ${on ? 'on' : ''}" data-id="${m.id}">${extra}${thumb(m)}
+    <div class="meta"><div class="t">${esc(m.title)}</div><div class="s">${tags.map(t => `<span class="tag-${esc(String(t).replace(/\W/g, ''))}">${esc(t)}</span>`).join('')}</div></div>
+    <div class="acts">${actions(m)}</div></div>`;
 }
 const A = {
-  cast: '<button class="btn primary sm" data-act="cast">' + icon('cast') + 'Cast</button>',
-  queue: '<button class="btn sm" data-act="enqueue" title="Add to queue" aria-label="Add to queue">' + icon('plus') + 'Queue</button>',
-  copy: '<button class="icon-btn" data-act="copy" title="Copy link" aria-label="Copy link">' + icon('copy') + '</button>',
-  vlc: '<button class="icon-btn" data-act="vlc" title="Open in VLC" aria-label="Open in VLC">' + icon('vlc') + '</button>'
+  cast: () => `<button class="round sm acc" data-act="cast" aria-label="Play">${icon('play')}</button>`,
+  queue: () => `<button class="round sm" data-act="enqueue" aria-label="Add to queue">${icon('plus')}</button>`,
+  vlc: m => NEEDS_VLC.includes(fmtOf(m.url)) ? `<button class="round sm" data-act="vlc" aria-label="Open in VLC">${icon('vlc')}</button>` : ''
 };
+const both = m => A.vlc(m) + A.queue() + A.cast();
+const clockStr = () => new Date().toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+const dateStr = () => new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
+
+function homeView() {
+  return `<div class="view home">
+    <div class="home-top"><span class="label">StreamBeam</span><button class="round sm" data-act="theme" aria-label="Switch light or dark">${icon('sun')}</button></div>
+    <div class="dial-wrap"><svg class="bars" id="bars" viewBox="0 0 400 400" aria-hidden="true"></svg>
+      <div class="dial"><button class="dial-in" data-act="devices" id="dialBtn">
+        <span class="clock" id="clock">${clockStr()}</span><span class="date" id="date">${esc(dateStr())}</span>
+        <span class="conn" id="conn"></span></button></div></div>
+    <nav class="grid" aria-label="Sections">${SECTIONS.map(([v, l, ic]) => `<button class="go" data-go="${v}"><span class="round">${icon(ic)}</span><span class="label">${l}</span>${v === 'queue' && S.queue.length ? `<span class="count">${S.queue.length}</span>` : ''}</button>`).join('')}</nav>
+  </div>`;
+}
+function updateConn() {
+  const c = $('#conn'); if (!c) return;
+  const dev = curDev(), on = !!dev || S.device === 'local';
+  const name = dev ? dev.name : S.device === 'local' ? 'This device' : 'Connect';
+  c.className = 'conn' + (on ? ' on' : '');
+  c.innerHTML = `<i class="dot"></i><span>${esc(name)}</span>`;
+  $('#dialBtn')?.setAttribute('aria-label', on ? `Connected to ${name}. Change screen` : 'Connect a screen');
+}
+
+/* The dial: radial bars around the clock that move while something plays, and a thin progress arc */
+const BARS = 120, R0 = 126, CIRC = 2 * Math.PI * 120;
+let barT = 0, barRaf = 0, barLast = 0;
+const barLen = (i, t) => { const a = i / BARS * Math.PI * 2; return 8 + 30 * (.5 + .5 * Math.sin(a * 3 + 1.3)) * (.55 + .45 * Math.sin(a * 7 + t)) + 10 * Math.abs(Math.sin(a * 13 + t * 1.7)); };
+function drawDial() {
+  const svg = $('#bars'); if (!svg) return;
+  let bars = '';
+  for (let i = 0; i < BARS; i++) { const l = barLen(i, barT); bars += `<rect x="198.6" y="${(200 - R0 - l).toFixed(1)}" width="2.8" height="${l.toFixed(1)}" rx="1.4" transform="rotate(${(i * 360 / BARS).toFixed(2)} 200 200)"/>`; }
+  svg.innerHTML = `<g class="barset">${bars}</g><circle class="track" cx="200" cy="200" r="120"/><circle class="arc" id="arc" cx="200" cy="200" r="120" transform="rotate(-90 200 200)" stroke-dasharray="0 ${CIRC}"/>`;
+  updateConn(); tick();
+  if (!barRaf && !matchMedia('(prefers-reduced-motion: reduce)').matches) barRaf = requestAnimationFrame(animateBars);
+}
+function animateBars(ts) {
+  barRaf = 0;
+  const svg = $('#bars'); if (!svg) return;
+  if (P.playing && ts - barLast > 80) {
+    barLast = ts; barT += .18;
+    const rects = svg.querySelectorAll('rect');
+    rects.forEach((r, i) => { const l = barLen(i, barT); r.setAttribute('y', (200 - R0 - l).toFixed(1)); r.setAttribute('height', l.toFixed(1)); });
+  }
+  barRaf = requestAnimationFrame(animateBars);
+}
+setInterval(() => { const c = $('#clock'); if (c) { c.textContent = clockStr(); $('#date').textContent = dateStr(); } }, 10000);
+
+function sectionView(v) {
+  const dev = curDev();
+  const sub = v === 'player' ? (dev ? dev.name : S.device === 'local' ? 'This device' : '') : v === 'today' ? dateStr() : '';
+  const right = ['player', 'mirror', 'settings'].includes(v) ? '' : `<button class="round sm" data-act="devices" aria-label="Choose a screen">${icon('cast')}</button>`;
+  return `<div class="view"><div class="head"><button class="round sm" data-act="home" aria-label="Back to home">${icon('left')}</button>
+    <div class="grow"><h1>${TITLES[v]}</h1>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>${right}</div>${views[v]()}</div>`;
+}
 
 const views = {
-  today() {
-    const ready = geminiReady();
-    const tile = t => {
-      const inner = `${icon(t.icon)}<b>${esc(t.label)}</b><span>${esc(t.sub)}</span>`;
-      return ready || (t.needsPlace && !place())
-        ? `<button class="tile" data-ask="${t.id}" aria-busy="${GM.busy === t.id}">${inner}</button>`
-        : `<a class="tile" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-copyask="${t.id}">${inner}</a>`;
-    };
-    const a = GM.answer;
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">${esc(todayStr())}</div><h1>Today</h1>
-      <p>News, weather and more from Gemini, one tap away.</p></div></div>
-    <form class="panel" id="askForm" autocomplete="off"><div class="ask">
-      <div class="field">${icon('spark')}<input id="askInput" placeholder="Ask Gemini anything" aria-label="Ask Gemini"></div>
-      <button class="btn primary" type="submit">Ask</button></div></form>
-    <div class="mode"><span style="flex:1 1 260px;min-width:0"><span class="dot ${ready ? 'on' : ''}"></span> ${ready
-      ? `Answers show here, from Gemini with Google Search${GM.server ? ' (server key)' : ' (your API key)'}.`
-      : 'Tiles copy a ready-made question and open Gemini, so you just paste. To get answers right here, add a Gemini API key.'}</span>
-      ${ready ? '' : '<button class="btn ghost sm" data-act="geminiSetup">Add API key</button>'}
-      <span class="where">${icon('pin')}<input id="tCity" value="${esc(S.settings.city)}" placeholder="${GM.loc ? 'Using your location' : 'Your city'}" aria-label="Your city"><button class="btn ghost sm" data-act="locate">Use my location</button></span></div>
-    <div class="tiles">${TILES.map(tile).join('')}</div>
-    ${GM.err ? `<div class="notice bad" style="margin:0">${esc(GM.err)}</div>` : ''}
-    ${a ? `<section class="panel answer" aria-live="polite">
-      <div class="view-head"><div class="grow"><div class="eyebrow">Gemini${a.at ? ' · ' + new Date(a.at).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : ''}</div><h2 style="margin:2px 0 0;font:800 20px/1.2 var(--f-display)">${esc(a.label)}</h2></div>
-        ${a.text ? `<button class="btn sm" data-act="speak">${icon('speak')}Read aloud</button><button class="btn ghost sm" data-act="copyAnswer">${icon('copy')}Copy</button>` : ''}</div>
-      ${a.text ? `<div class="md">${md(a.text)}</div>` : '<div class="loading"><i></i>Asking Gemini…</div>'}
-      ${a.sources?.length ? `<div><div class="eyebrow" style="margin-bottom:6px">Sources</div><div class="sources">${a.sources.slice(0, 8).map(x => `<a href="${esc(x.uri)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a>`).join('')}</div></div>` : ''}
-    </section>` : ''}`;
-  },
-
   browser() {
     const bm = S.bookmarks.some(b => b.url === S.url);
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Web browser</div><h1>Find a video, send it to the TV</h1>
-      <p>Open a page or paste a link. Videos on the page show up below, ready to cast.</p></div></div>
-    <form class="panel" id="urlForm" autocomplete="off">
-      <div class="urlbar">
-        <div class="field">${icon('globe')}<input id="urlInput" name="url" value="${esc(S.url)}" placeholder="Search or enter a web address" aria-label="Web address"></div>
-        <button type="button" class="icon-btn star ${bm ? 'on' : ''}" data-act="bookmark" title="${bm ? 'Remove bookmark' : 'Bookmark this page'}" aria-label="Bookmark">${icon('star')}</button>
-        <button class="btn primary" type="submit">Go</button>
-      </div>
-      ${S.notice ? `<div class="notice ${S.notice.ok ? 'ok' : ''}">${esc(S.notice.text)}${S.notice.link ? ` <a href="${esc(S.notice.link)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Open site ↗</a>` : ''}</div>` : ''}
-    </form>
-    <section class="panel"><div class="panel-h"><h2>Videos on this page</h2><span class="chip">${S.detected.length}</span><div class="grow"></div>
-      ${S.detected.length > 1 ? '<button class="btn ghost sm" data-act="queueAll">' + icon('list') + 'Queue all</button>' : ''}</div>
-      <div class="list" data-list="detected">${S.detected.length ? S.detected.map(m => mediaRow(m, A.copy + A.vlc + A.queue + A.cast)).join('') : '<div class="empty"><b>No videos yet</b>Open a page or paste a direct link.</div>'}</div></section>
-    <section><div class="eyebrow" style="margin-bottom:10px">Start page</div><div class="sites">
-      ${SITES.map(s => `<button class="site" data-site="${s.id}"><b>${esc(s.name)}</b><span>${esc(s.blurb)}</span><small>${esc(s.url)}</small></button>`).join('')}
-    </div></section>`;
+    const n = S.notice;
+    return `<form id="urlForm" class="field" autocomplete="off">${icon('search')}<input id="urlInput" value="${esc(S.url)}" placeholder="Search or paste a link" aria-label="Web address" enterkeyhint="go">
+        <button type="button" class="round sm" data-act="bookmark" aria-pressed="${bm}" aria-label="${bm ? 'Remove bookmark' : 'Bookmark'}" style="width:34px;height:34px">${icon('star')}</button></form>
+      ${n && !n.ok ? `<div class="note">${esc(n.text)}${n.link ? `<div class="acts"><a class="btn sm" href="${esc(n.link)}" target="_blank" rel="noopener">Open site</a></div>` : ''}</div>` : ''}
+      <section class="panel"><div class="panel-t"><span class="label">Videos</span><span class="label acc">${S.detected.length}</span><div class="grow"></div>
+        ${S.detected.length > 1 ? `<button class="btn flat sm" data-act="queueAll">Queue all</button>` : ''}</div>
+        <div data-list="detected">${S.detected.length ? S.detected.map(m => mediaRow(m, both)).join('') : `<div class="empty">${n && n.ok ? esc(n.text) : 'Open a page or paste a video link.'}</div>`}</div></section>
+      <section class="panel"><div class="panel-t"><span class="label">Start</span></div>
+        ${SITES.map(s => `<button class="row" data-site="${s.id}" style="width:100%;text-align:left"><div class="thumb" style="${softBg(s.name)}">${esc(initials(s.name))}</div><div class="meta"><div class="t">${esc(s.name)}</div><div class="s"><span>${s.media.length} videos</span></div></div><span class="muted">${icon('left').replace('class="i"', 'class="i" style="transform:rotate(180deg)"')}</span></button>`).join('')}</section>`;
   },
 
   player() {
-    const it = P.item;
-    const dev = DEVICES.find(d => d.id === S.device);
+    const it = P.item, dev = curDev();
     const pct = !P.live && P.dur ? P.pos / P.dur * 100 : 0;
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">${dev ? 'Casting to ' + esc(dev.name) : 'Not connected'}</div><h1>Remote</h1></div>
-      <button class="btn" data-act="devices">${icon('cast')}${dev ? 'Change screen' : 'Connect'}</button></div>
-    ${M.stream ? `<div class="notice bad" style="margin:0">Your screen is being mirrored. Playing a video stops the mirror. <button class="btn ghost sm" data-act="openMirror">Go to mirroring</button></div>` : ''}
-    ${P.yt ? ytNotice() : ''}${vlcPanel()}
-    <div class="np">
-      <div class="tv"><div class="screen ${it ? '' : 'idle'}" id="screen"></div>
-        <div class="tv-foot"><span>${dev ? icon(dev.icon) + ' ' + esc(dev.kind) : 'No screen connected'}</span><span class="mono" id="srcState"></span></div></div>
-      <div class="panel remote">
-        <div><div class="eyebrow">${it ? (P.live ? 'Live channel' : 'Now playing') : 'Idle'}</div>
-          <div class="title">${it ? esc(it.title) : 'Nothing playing'}</div>
-          ${it ? `<div class="meta"><div class="s"><span class="chip fmt-${fmtOf(it.url)}">${fmtOf(it.url)}</span>${it.res && it.res !== '—' ? `<span>${esc(it.res)}</span>` : ''}${P.subName ? `<span>· CC ${esc(P.subName)}</span>` : ''}</div></div>` : '<p class="muted" style="margin:6px 0 0">Pick a video in the Browser, Queue, Local files or IPTV.</p>'}
-        </div>
-        <div class="seek">
-          <input type="range" id="seek" min="0" max="${Math.max(1, Math.round(P.dur))}" step="1" value="${Math.round(P.pos)}" style="--p:${pct}%" ${!it || P.live ? 'disabled' : ''} aria-label="Seek">
-          <div class="times mono"><span id="tPos">${fmt(P.pos)}</span><span id="tDur">${P.live ? 'LIVE' : '-' + fmt(P.dur - P.pos)}</span></div>
-        </div>
-        <div class="transport">
-          <button class="icon-btn" data-act="back" title="Back ${S.settings.skip}s" aria-label="Back ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('back')}</button>
-          <button class="icon-btn" data-act="stop" title="Stop casting" aria-label="Stop" ${!it ? 'disabled' : ''}>${icon('stop')}</button>
-          <button class="icon-btn big" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}" ${!it ? 'disabled' : ''}>${icon(P.playing ? 'pause' : 'play')}</button>
-          <button class="icon-btn" data-act="next" title="Next in queue" aria-label="Next in queue">${icon('next')}</button>
-          <button class="icon-btn" data-act="fwd" title="Forward ${S.settings.skip}s" aria-label="Forward ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('fwd')}</button>
-        </div>
-        <div class="knobs">
-          <div class="knob wide"><button class="icon-btn" data-act="mute" aria-label="${P.muted ? 'Unmute' : 'Mute'}" style="width:30px;height:30px">${icon(P.muted ? 'mute' : 'vol')}</button>
-            <input type="range" id="vol" min="0" max="100" value="${P.muted ? 0 : Math.round(P.vol * 100)}" style="--p:${P.muted ? 0 : P.vol * 100}%" aria-label="TV volume"><span class="mono muted" id="volTxt" style="width:34px;text-align:right">${P.muted ? 0 : Math.round(P.vol * 100)}</span></div>
-          <div class="knob"><label for="rate">Speed</label><select id="rate">${[.5, .75, 1, 1.25, 1.5, 2].map(r => `<option value="${r}" ${r === P.rate ? 'selected' : ''}>${r}×</option>`).join('')}</select></div>
-          <div class="knob"><label for="subBtn">Subtitles</label><button id="subBtn" class="btn ghost sm" data-act="subs" style="justify-content:flex-start;padding:0;background:none">${icon('cc')}${P.subName ? 'Turn off' : 'Load .srt / .vtt'}</button></div>
-        </div>
-        ${S.queue.length ? `<div class="meta" style="border-top:1px solid var(--line);padding-top:12px"><div class="eyebrow">Up next</div><div class="t" style="margin-top:6px">${esc(S.queue[0].title)}</div><div class="s">${S.queue.length} in queue · Autoplay ${S.settings.autoplay ? 'on' : 'off'}</div></div>` : ''}
-      </div>
-    </div>
-    ${P.yt ? ytPanel() : ''}`;
+    const devLabel = dev ? dev.name : S.device === 'local' ? 'This device' : 'Choose a screen';
+    return `${M.stream ? `<div class="note warn"><span><i class="live-dot"></i>Your screen is being mirrored. Playing a video stops it.</span></div>` : ''}
+      ${P.yt ? ytNotice() : ''}${vlcPanel()}${nativePanel()}
+      <div class="screen" id="screen"></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+        <span class="label">${it ? (P.live ? '<i class="live-dot"></i>Live' : esc(fmtOf(it.url))) : 'Idle'}${P.subName ? ' · CC' : ''}</span>
+        <div class="np-title">${it ? esc(it.title) : 'Nothing playing'}</div></div>
+      <div class="seek"><input type="range" id="seek" min="0" max="${Math.max(1, Math.round(P.dur))}" step="1" value="${Math.round(P.pos)}" style="--p:${pct}%" ${!it || P.live ? 'disabled' : ''} aria-label="Seek">
+        <div class="times"><span id="tPos">${fmt(P.pos)}</span><span id="tDur">${P.live ? 'LIVE' : '-' + fmt(P.dur - P.pos)}</span></div></div>
+      <div class="transport">
+        <button class="round" data-act="back" aria-label="Back ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('back')}</button>
+        <button class="round sm" data-act="stop" aria-label="Stop" ${!it ? 'disabled' : ''}>${icon('stop')}</button>
+        <button class="round big" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}" ${!it ? 'disabled' : ''}>${icon(P.playing ? 'pause' : 'play')}</button>
+        <button class="round sm" data-act="next" aria-label="Next in queue" ${!S.queue.length ? 'disabled' : ''}>${icon('next')}</button>
+        <button class="round" data-act="fwd" aria-label="Forward ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('fwd')}</button></div>
+      <div class="volrow"><button class="round sm" data-act="mute" aria-label="${P.muted ? 'Unmute' : 'Mute'}" aria-pressed="${P.muted}">${icon(P.muted ? 'mute' : 'vol')}</button>
+        <input type="range" id="vol" min="0" max="100" value="${P.muted ? 0 : Math.round(P.vol * 100)}" style="--p:${P.muted ? 0 : P.vol * 100}%" aria-label="Volume"></div>
+      <div class="pills">
+        <button class="btn sm devpill" data-act="devices">${icon(dev?.icon || (S.device === 'local' ? 'phone' : 'cast'))}<span>${esc(devLabel)}</span></button>
+        <button class="btn sm" data-act="rate" aria-label="Playback speed"><span class="mono">${P.rate}×</span></button>
+        <button class="btn sm" data-act="subs" aria-pressed="${!!P.subName}">${icon('cc')}${P.subName ? 'Off' : ''}</button></div>
+      ${S.queue.length ? `<div class="note"><span class="label">Up next</span><b>${esc(S.queue[0].title)}</b></div>` : ''}
+      ${P.yt ? ytPanel() : ''}`;
   },
 
   mirror() {
-    const dev = DEVICES.find(d => d.id === S.device);
+    if (N.on) return `<button class="big-go" data-act="nativeMirror">${icon('mirror')}<span class="label acc">Start</span></button>
+      <div class="note">Android sends your whole screen to a TV or car screen that supports screen casting (Smart View, Miracast or Google Cast). Pick it in the list that opens.</div>`;
     const live = !!M.stream;
-    const sel = (id, label, opts, cur) => `<div class="knob"><label for="${id}">${label}</label><select id="${id}" ${live ? 'disabled' : ''}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
-    const note = !dev ? 'Connect a screen to send the mirror to.'
-      : dev.real ? 'Nearby screens can’t take a mirror straight from a web page. Use your browser’s Cast screen option below to put it on the TV.'
-      : 'Demo receiver: the mirror shows in this preview. For a real TV, use the built-in mirroring steps below.';
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Screen mirroring</div><h1>Mirror your screen</h1>
-      <p>Show your whole screen, one window or a browser tab on the TV. Use it for slides, photos, games and sites that can’t be cast.</p></div></div>
-    <div class="mirror">
-      <div class="tv"><div class="screen" id="mscreen"></div>
-        <div class="tv-foot"><span>${dev ? icon(dev.icon) + ' ' + esc(dev.name) : 'No screen connected'}</span><span class="mono" id="mStats">${live ? '' : canCapture ? 'Ready' : 'Not supported here'}</span></div></div>
-      <div class="panel remote">
-        <div><span class="status ${live ? 'live' : 'ready'}">${live ? '<span class="rec-dot"></span>Live · <span id="mTime">0:00</span>' : 'Not mirroring'}</span>
-          <div class="title" style="margin-top:6px">${dev ? 'To ' + esc(dev.name) : 'No screen selected'}</div>
-          <p class="muted" style="margin:4px 0 0;font-size:13.5px">${note}</p></div>
-        <div class="knobs">
-          ${sel('m-surface', 'Share', [['monitor', 'Entire screen'], ['window', 'A window'], ['browser', 'A browser tab']], M.surface)}
-          ${sel('m-quality', 'Quality', [['720', '720p'], ['1080', '1080p'], ['1440', '1440p']], M.quality)}
-          ${sel('m-fps', 'Frame rate', [[15, '15 fps · docs'], [30, '30 fps · video'], [60, '60 fps · games']], M.fps)}
-          <div class="knob"><label for="m-audio">Sound</label><label style="display:flex;align-items:center;gap:8px;font-weight:600"><span class="switch"><input type="checkbox" id="m-audio" ${M.audio ? 'checked' : ''} ${live ? 'disabled' : ''}><i></i></span>${M.audio ? 'On' : 'Off'}</label></div>
-        </div>
-        ${live ? `<button class="btn" data-act="stopMirror" style="padding:12px">${icon('stop')}Stop mirroring</button>`
-               : `<button class="btn primary" data-act="startMirror" style="padding:12px">${icon('mirror')}Start mirroring</button>`}
-        ${dev ? '' : `<button class="btn ghost" data-act="devices">${icon('cast')}Connect a screen</button>`}
-      </div>
-    </div>
-    ${M.error ? `<div class="notice bad" style="margin:0">${esc(M.error)}</div>` : ''}
-    <section style="display:flex;flex-direction:column;gap:10px">
-      <div><div class="eyebrow">Built-in mirroring</div><p class="muted" style="margin:6px 0 0;max-width:65ch">Every phone and computer can mirror to a TV on its own. These steps work with any real TV on your Wi-Fi${GUIDES[0].you ? ', and the one marked “This device” fits what you’re using now' : ''}.</p></div>
-      <div class="guide">${GUIDES.map(g => `<article class="${g.you ? 'yours' : ''}"><h3>${icon(g.icon)}${esc(g.title)}${g.you ? '<span class="chip">This device</span>' : ''}</h3>
-        <ol>${g.steps.map(x => `<li>${x}</li>`).join('')}</ol><div class="works">${esc(g.works)}</div></article>`).join('')}</div>
-    </section>`;
+    const sel = (id, label, opts, cur) => `<div class="set"><span>${label}</span><select id="${id}" ${live ? 'disabled' : ''}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+    return `<div class="screen" id="mscreen"></div>
+      <button class="big-go ${live ? 'on' : ''}" data-act="${live ? 'stopMirror' : 'startMirror'}" ${!canCapture && !live ? 'disabled' : ''}>${icon(live ? 'stop' : 'mirror')}<span class="label ${live ? '' : 'acc'}">${live ? '<span id="mTime">0:00</span>' : 'Start'}</span></button>
+      ${M.error ? `<div class="note warn">${esc(M.error)}</div>` : ''}
+      ${canCapture ? `<section class="panel">
+        ${sel('m-surface', 'Share', [['monitor', 'Screen'], ['window', 'Window'], ['browser', 'Tab']], M.surface)}
+        ${sel('m-quality', 'Quality', [['720', '720p'], ['1080', '1080p'], ['1440', '1440p']], M.quality)}
+        ${sel('m-fps', 'Frame rate', [[15, '15 fps'], [30, '30 fps'], [60, '60 fps']], M.fps)}
+        <div class="set"><span>Sound</span><label class="switch"><input type="checkbox" id="m-audio" ${M.audio ? 'checked' : ''} ${live ? 'disabled' : ''}><i></i></label></div></section>` : ''}
+      <section class="panel"><details class="more"><summary><span class="label">Mirror from your device</span></summary><div class="body">
+        ${GUIDES.slice(0, canCapture ? 3 : 6).map(g => `<div><b style="font-weight:400">${esc(g.title)}</b><ol class="steps">${g.steps.map(x => `<li>${x}</li>`).join('')}</ol></div>`).join('')}
+      </div></details></section>`;
   },
 
   queue() {
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Play queue</div><h1>Up next</h1><p>Videos play in this order on ${esc(devName())}.</p></div>
-      ${S.queue.length ? '<button class="btn" data-act="clearQueue">' + icon('x') + 'Clear</button><button class="btn" data-act="queueM3u">' + icon('vlc') + 'Save for VLC</button><button class="btn primary" data-act="next">' + icon('play') + 'Play next</button>' : ''}</div>
-    <section class="panel"><div class="list" data-list="queue">${S.queue.length ? S.queue.map((m, i) => mediaRow(m,
-      `<button class="icon-btn" data-act="up" aria-label="Move up" ${i ? '' : 'disabled'}>${icon('up')}</button><button class="icon-btn" data-act="down" aria-label="Move down" ${i < S.queue.length - 1 ? '' : 'disabled'}>${icon('down')}</button><button class="icon-btn" data-act="remove" aria-label="Remove">${icon('x')}</button>${A.cast}`,
-      `<span class="qnum">${i + 1}</span>`).replace('class="row ', 'class="row q ')).join('') : '<div class="empty"><b>The queue is empty</b>Use “Queue” on any video to line it up.</div>'}</div></section>`;
+    return `${S.queue.length ? `<div class="pills" style="justify-content:flex-start"><button class="btn sm acc" data-act="next">${icon('play')}Play</button><button class="btn sm" data-act="queueM3u">${icon('vlc')}VLC</button><button class="btn sm" data-act="clearQueue">Clear</button></div>` : ''}
+      <section class="panel"><div data-list="queue">${S.queue.length ? S.queue.map((m, i) => mediaRow(m, () =>
+        `<button class="round sm" data-act="up" aria-label="Move up" ${i ? '' : 'disabled'}>${icon('up')}</button><button class="round sm" data-act="remove" aria-label="Remove">${icon('x')}</button>${A.cast()}`)).join('')
+        : '<div class="empty">Empty. Tap + on any video.</div>'}</div></section>`;
   },
 
   local() {
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">This device</div><h1>Local files</h1><p>Cast videos and music stored on this computer or phone. Files stay on your device.</p></div></div>
-    <label class="drop" id="drop" for="fileIn">${icon('upload')}<b>Drop videos here or choose files</b><span class="muted">MP4, WebM, MOV, MKV, MP3, M4A</span>
-      <span class="btn primary">${icon('folder')}Choose files</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" multiple hidden></label>
-    <section class="panel"><div class="panel-h"><h2>Added this session</h2><span class="chip">${S.local.length}</span></div>
-      <div class="list" data-list="local">${S.local.length ? S.local.map(m => mediaRow(m, A.queue + A.cast)).join('') : '<div class="empty"><b>No files yet</b>Files you add appear here.</div>'}</div></section>`;
+    return `<label class="drop" id="drop" for="fileIn">${icon('upload')}<span>Choose or drop files</span><span class="btn sm acc">Choose files</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" multiple hidden></label>
+      ${S.local.length ? `<section class="panel"><div data-list="local">${S.local.map(m => mediaRow(m, () => A.queue() + A.cast())).join('')}</div></section>` : ''}
+      ${S.device.startsWith('n:') ? '<div class="note">Files from this phone play here, not on the TV.</div>' : ''}`;
   },
 
   iptv() {
@@ -1286,63 +1234,65 @@ const views = {
     const q = S.chSearch.toLowerCase();
     const shown = ch.filter(c => (S.group === 'All' || c.group === S.group) && (!q || c.title.toLowerCase().includes(q)));
     views._ch = ch;
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">M3U playlist</div><h1>IPTV channels</h1><p>${ch.length} channels in ${groups.length - 1} groups.</p></div></div>
-    <section class="panel">
-      <div class="iptv-tools"><div class="search">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="Search channels" aria-label="Search channels"></div>
-        <div class="chips">${groups.map(g => `<button class="fchip" data-group="${esc(g)}" aria-pressed="${g === S.group}">${esc(g)}</button>`).join('')}</div></div>
-      <div class="channels" data-list="iptv">${shown.map(c => `<button class="ch" data-ch="${c.id}">${thumb({ ...c, duration: 0 })}<div class="cm"><b>${esc(c.title)}</b><span>${esc(c.group)} · ${fmtOf(c.url)}</span></div></button>`).join('') || '<div class="empty"><b>No channels match</b>Try another group or search.</div>'}</div>
-      <details class="import"><summary>Load a playlist</summary><div class="body">
-        <textarea id="m3uText" aria-label="M3U playlist">${esc(S.m3u)}</textarea>
-        <div class="actions" style="flex-wrap:wrap"><label class="btn" for="m3uFile">${icon('upload')}Open .m3u file</label><input id="m3uFile" type="file" accept=".m3u,.m3u8,text/plain" hidden>
-          <button class="btn ghost" data-act="m3uSample">Reset to sample</button><div style="flex:1"></div><button class="btn primary" data-act="m3uApply">Load channels</button></div>
-      </div></details>
-    </section>`;
+    return `<div class="field">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="Search ${ch.length} channels" aria-label="Search channels"></div>
+      <div class="chips">${groups.map(g => `<button class="chip" data-group="${esc(g)}" aria-pressed="${g === S.group}">${esc(g)}</button>`).join('')}</div>
+      <section class="panel"><div data-list="iptv">${shown.map(c => `<button class="row" data-ch="${c.id}" style="width:100%;text-align:left">${thumb(c)}<div class="meta"><div class="t">${esc(c.title)}</div><div class="s"><span>${esc(c.group)}</span><span>${fmtOf(c.url)}</span></div></div><span class="round sm acc">${icon('play')}</span></button>`).join('') || '<div class="empty">No channels match.</div>'}</div>
+        <details class="more"><summary><span class="label">Playlist</span></summary><div class="body">
+          <textarea id="m3uText" aria-label="M3U playlist">${esc(S.m3u)}</textarea>
+          <div class="pills" style="justify-content:flex-start"><label class="btn sm" for="m3uFile">${icon('upload')}Open file</label><input id="m3uFile" type="file" accept=".m3u,.m3u8,text/plain" hidden>
+            <button class="btn sm" data-act="m3uSample">Sample</button><button class="btn sm acc" data-act="m3uApply">Load</button></div></div></details></section>`;
   },
 
-  bookmarks() {
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Saved pages</div><h1>Bookmarks</h1><p>Pages you return to for videos. Tap the star in the address bar to add one.</p></div></div>
-    <section class="panel"><div class="list" data-list="bookmarks">${S.bookmarks.length ? S.bookmarks.map(b => `<div class="row" data-id="${b.id}" style="grid-template-columns:40px minmax(0,1fr) auto">
-      <div class="dev" style="padding:0;border:0"><span class="ico">${icon('star')}</span></div>
-      <div class="meta"><div class="t">${esc(b.title)}</div><div class="u">${esc(b.url)}</div></div>
-      <div class="actions"><button class="icon-btn" data-act="unbookmark" aria-label="Remove bookmark">${icon('x')}</button><button class="btn sm" data-act="openBm">${icon('globe')}Open</button></div></div>`).join('') : '<div class="empty"><b>No bookmarks</b>Use the star in the Browser to save a page.</div>'}</div></section>`;
+  today() {
+    const ready = geminiReady();
+    const tile = t => ready || (t.needsPlace && !place())
+      ? `<button class="tile" data-ask="${t.id}" aria-busy="${GM.busy === t.id}">${icon(t.icon)}<b>${esc(t.label)}</b></button>`
+      : `<a class="tile" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-copyask="${t.id}">${icon(t.icon)}<b>${esc(t.label)}</b></a>`;
+    const a = GM.answer;
+    return `<form id="askForm" class="field" autocomplete="off">${icon('spark')}<input id="askInput" placeholder="Ask Gemini" aria-label="Ask Gemini" enterkeyhint="send"><button class="round sm acc" type="submit" aria-label="Ask" style="width:34px;height:34px">${icon('next')}</button></form>
+      <div class="field">${icon('pin')}<input id="tCity" value="${esc(S.settings.city)}" placeholder="${GM.loc ? 'Using your location' : 'Your city'}" aria-label="Your city"><button class="btn flat sm" type="button" data-act="locate">Locate</button></div>
+      ${GM.err ? `<div class="note warn">${esc(GM.err)}</div>` : ''}
+      ${a ? `<section class="panel answer" aria-live="polite">
+        <div style="display:flex;align-items:center;gap:10px"><span class="label" style="flex:1">${esc(a.label)}</span>
+          ${a.text ? `<button class="round sm" data-act="speak" aria-label="Read aloud">${icon('speak')}</button><button class="round sm" data-act="copyAnswer" aria-label="Copy">${icon('copy')}</button>` : ''}</div>
+        ${a.text ? `<div class="md">${md(a.text)}</div>` : '<div style="display:flex;gap:10px;align-items:center" class="muted"><i class="spin"></i>Asking Gemini…</div>'}
+        ${a.sources?.length ? `<div class="sources">${a.sources.slice(0, 8).map(x => `<a href="${esc(x.uri)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a>`).join('')}</div>` : ''}
+      </section>` : ''}
+      <div class="tiles">${TILES.map(tile).join('')}</div>
+      ${ready ? '' : '<div class="note">Tiles open Gemini with the question copied. <div class="acts"><button class="btn sm" data-act="geminiSetup">Add a Gemini key for answers here</button></div></div>'}`;
   },
 
-  history() {
+  library() {
     const day = t => { const d = Math.floor((Date.now() - t) / 864e5); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago'; };
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Recently cast</div><h1>History</h1><p>Pick up where you left off. Resume ${S.settings.resume ? 'is on' : 'is off'}.</p></div>
-      ${S.history.length ? '<button class="btn" data-act="clearHistory">' + icon('x') + 'Clear history</button>' : ''}</div>
-    <section class="panel"><div class="list" data-list="history">${S.history.length ? S.history.map(h => mediaRow({ ...h, res: `${day(h.at)} · stopped at ${fmt(h.pos)}${h.duration ? ' of ' + fmt(h.duration) : ''}` }, A.queue + `<button class="btn primary sm" data-act="cast">${icon('play')}${h.pos > 5 ? 'Resume' : 'Cast'}</button>`)).join('') : '<div class="empty"><b>Nothing cast yet</b>Videos you play show up here.</div>'}</div></section>`;
+    const h = S.libTab === 'history';
+    return `<div class="seg" role="group"><button data-act="libTab" data-tab="history" aria-pressed="${h}">History</button><button data-act="libTab" data-tab="bookmarks" aria-pressed="${!h}">Bookmarks</button></div>
+      ${h ? `<section class="panel"><div data-list="history">${S.history.length ? S.history.map(x => mediaRow({ ...x, res: day(x.at) + (x.pos > 5 ? ' · ' + fmt(x.pos) : ''), duration: 0 }, () => A.queue() + A.cast())).join('') : '<div class="empty">Nothing played yet.</div>'}</div></section>
+          ${S.history.length ? '<button class="btn flat sm" data-act="clearHistory" style="align-self:center">Clear history</button>' : ''}`
+        : `<section class="panel"><div data-list="bookmarks">${S.bookmarks.length ? S.bookmarks.map(b => `<div class="row" data-id="${b.id}"><div class="thumb" style="${softBg(b.title)}">${icon('star')}</div>
+            <div class="meta"><div class="t">${esc(b.title)}</div><div class="s"><span style="text-transform:none">${esc(b.url.replace(/^https?:\/\//, ''))}</span></div></div>
+            <div class="acts"><button class="round sm" data-act="unbookmark" aria-label="Remove">${icon('x')}</button><button class="round sm acc" data-act="openBm" aria-label="Open">${icon('globe')}</button></div></div>`).join('') : '<div class="empty">Tap ☆ in Browse to save a page.</div>'}</div></section>`}`;
   },
 
   settings() {
     const st = S.settings;
     const sw = (id, on) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><i></i></label>`;
     const sel = (id, vals, cur) => `<select id="${id}">${vals.map(v => `<option ${String(v) === String(cur) ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
-    return `<div class="view-head"><div class="grow"><div class="eyebrow">Preferences</div><h1>Settings</h1></div></div>
-    <section class="panel">
-      <div class="panel-h"><h2>Playback</h2></div>
-      <div class="set"><div><b>Autoplay next in queue</b><span>Start the next video when one ends.</span></div>${sw('s-autoplay', st.autoplay)}</div>
-      <div class="set"><div><b>Resume where I left off</b><span>Uses your history to continue a video.</span></div>${sw('s-resume', st.resume)}</div>
-      <div class="set"><div><b>Skip buttons jump</b><span>Seconds for back and forward.</span></div>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
-      <div class="set"><div><b>Preferred quality</b><span>For adaptive (HLS/DASH) streams.</span></div>${sel('s-quality', ['Auto', '1080p', '720p', '480p'], st.quality)}</div>
-    </section>
-    <section class="panel" id="geminiSettings">
-      <div class="panel-h"><h2>Today (Gemini)</h2></div>
-      <div class="set"><div><b>Gemini API key</b><span>${GM.server ? 'This server already has a key, so this one is only used if you open the app elsewhere.' : 'Lets answers show in the app. Get a free key at aistudio.google.com/apikey. It’s stored on this device only.'}</span></div><input id="s-geminiKey" type="password" value="${esc(st.geminiKey)}" placeholder="AIza…" autocomplete="off" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
-      <div class="set"><div><b>Gemini model</b><span>Any model that supports Google Search grounding.</span></div><input id="s-geminiModel" value="${esc(st.geminiModel)}" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
-      <div class="set"><div><b>News country</b><span>Two-letter code, for example US, GB, IN. Leave empty to use ${esc(country())}.</span></div><input id="s-region" value="${esc(st.region)}" maxlength="2" placeholder="${esc(REGION)}" style="width:80px;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);text-transform:uppercase"></div>
-      <div class="set"><div><b>Temperature</b><span>Used for weather.</span></div>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div>
-    </section>
-    <section class="panel">
-      <div class="panel-h"><h2>Subtitles</h2></div>
-      <div class="set"><div><b>Text size on TV</b><span>Applies to .srt and .vtt files.</span></div>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div>
-    </section>
-    <section class="panel">
-      <div class="panel-h"><h2>Devices</h2></div>
-      <div class="set"><div><b>Suggest VLC for unsupported videos</b><span>Offers VLC when a format such as MKV, AVI or DASH won’t play in the browser.</span></div>${sw('s-vlcFallback', st.vlcFallback)}</div>
-      <div class="set"><div><b>VLC bridge address</b><span>Where the StreamBeam server (server.mjs) runs. Leave empty to use ${esc(vlcBase())}.</span></div><input id="s-vlcBridge" value="${esc(st.vlcBridge)}" placeholder="http://localhost:8090" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
-      <div class="set"><div><b>Show demo devices</b><span>Simulated Chromecast, Roku, Fire TV, DLNA and AirPlay receivers for trying the app. “Nearby screen” uses your browser’s real casting.</span></div>${sw('s-demo', st.demo)}</div>
-    </section>`;
+    const txt = (id, val, ph, type = 'text') => `<div class="field"><input id="${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"></div>`;
+    return `<section class="panel"><div class="panel-t"><span class="label">Playback</span></div>
+        <div class="set"><span>Autoplay queue</span>${sw('s-autoplay', st.autoplay)}</div>
+        <div class="set"><span>Resume where I stopped</span>${sw('s-resume', st.resume)}</div>
+        <div class="set"><span>Skip</span>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
+        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></section>
+      <section class="panel" id="geminiSettings"><div class="panel-t"><span class="label">Today</span></div>
+        <div class="set"><span>Gemini key<span class="sub">Free at aistudio.google.com/apikey. Stays on this device.</span></span>${txt('s-geminiKey', st.geminiKey, GM.server ? 'Server key in use' : 'AIza…', 'password')}</div>
+        <div class="set"><span>Model</span>${txt('s-geminiModel', st.geminiModel, 'gemini-2.5-flash')}</div>
+        <div class="set"><span>News country</span>${txt('s-region', st.region, REGION)}</div>
+        <div class="set"><span>Temperature</span>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div></section>
+      <section class="panel"><div class="panel-t"><span class="label">Screens</span></div>
+        <div class="set"><span>Suggest VLC for MKV, AVI…</span>${sw('s-vlcFallback', st.vlcFallback)}</div>
+        <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div>
+        <div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div></section>
+      <div class="label" style="text-align:center">StreamBeam${N.on ? ' · App' : ''}</div>`;
   }
 };
 
@@ -1350,210 +1300,204 @@ function ytLink() {
   const y = P.yt; if (!y) return '';
   return y.id ? `https://www.youtube.com/watch?v=${y.id}${y.list ? '&list=' + y.list : ''}${P.pos > 5 ? '&t=' + Math.floor(P.pos) + 's' : ''}` : ytUrl(y);
 }
+function nativePanel() {
+  const d = curDev();
+  if (!d || !d.native || !d.away || !N.on || N.scanning) return '';
+  return `<div class="note warn">${esc(d.name)} isn’t answering. Is it on, and on the same Wi-Fi?<div class="acts"><button class="btn sm" data-act="devices">${icon('refresh')}Search again</button></div></div>`;
+}
 function vlcPanel() {
   if (S.device === 'vlc' && !V.ok) {
-    const pw = 'choose-a-password';
-    return `<section class="panel yt-tv"><h2>${icon('vlc')} Connect VLC</h2>
-      ${V.err ? `<div class="notice bad" style="margin:0">${esc(V.err)}</div>` : ''}
-      <ol class="vlc-steps">
-        <li><b>Turn on VLC’s web interface.</b> In VLC: Tools → Preferences → Show settings: <b>All</b> → Interface → Main interfaces → tick <b>Web</b>. Then under Main interfaces → Lua, set a password. Restart VLC. Or start it with <code>vlc --extraintf http --http-password ${pw}</code></li>
-        <li><b>Start the StreamBeam server</b> on the same computer: <code>VLC_PASSWORD=${pw} node web/server.mjs</code>. Add <code>BIND=0.0.0.0</code> to use your phone as the remote.</li>
-        <li><b>Open StreamBeam from the server</b> at <code>http://localhost:8090</code>, or <code>http://&lt;computer-ip&gt;:8090</code> on your phone.</li>
-      </ol>
-      <div class="bridge"><input id="vlcBridge" value="${esc(S.settings.vlcBridge)}" placeholder="${esc(vlcBase())}" aria-label="Bridge address"><button class="btn primary" data-act="vlcConnect" ${V.busy ? 'disabled' : ''}>${V.busy ? 'Connecting…' : 'Connect to VLC'}</button></div>
-    </section>`;
+    return `<div class="note warn"><b>Connect VLC</b>${V.err ? esc(V.err) : 'Start server.mjs next to VLC, then connect.'}
+      <ol class="steps"><li>VLC: Tools → Preferences → All → Main interfaces → tick <b>Web</b>, set a Lua password.</li><li>Run <code>VLC_PASSWORD=… node web/server.mjs</code></li></ol>
+      <div class="field" style="min-height:42px"><input id="vlcBridge" value="${esc(S.settings.vlcBridge)}" placeholder="${esc(vlcBase())}" aria-label="Server address"></div>
+      <div class="acts"><button class="btn sm acc" data-act="vlcConnect" ${V.busy ? 'disabled' : ''}>${V.busy ? 'Connecting…' : 'Connect'}</button></div></div>`;
   }
   const it = P.item;
-  if (!it || vlcOn() || P.yt || !S.settings.vlcFallback) return '';
+  if (!it || vlcOn() || nativeOn() || P.yt || !S.settings.vlcFallback) return '';
   const f = fmtOf(it.url);
   if (!(NEEDS_VLC.includes(f) || P.vidErr)) return '';
-  return `<div class="notice" style="margin:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:220px">${P.vidErr ? 'The browser couldn’t decode this video.' : `Browsers can’t play ${f} on their own.`} VLC plays it, with every codec built in.</span>
-    <button class="btn sm" data-act="vlc">${icon('vlc')}Open in VLC</button>${canVlc(it.url) ? `<button class="btn primary sm" data-act="vlcUse">${icon('cast')}Cast to VLC</button>` : ''}</div>`;
+  return `<div class="note">${P.vidErr ? 'This video doesn’t play here.' : `${f} doesn’t play here.`} VLC plays it.<div class="acts"><button class="btn sm acc" data-act="vlc">${icon('vlc')}Open in VLC</button></div></div>`;
 }
-
 function ytNotice() {
   const msg = {
-    loading: ['', 'Loading the YouTube player…'],
-    blocked: ['bad', 'YouTube can’t load inside this page (it blocks the YouTube player). Open the app directly in a browser, or use one of the options below to watch on a real TV.'],
-    noembed: ['bad', 'The owner of this video doesn’t allow it to play outside YouTube. Use one of the options below instead.'],
-    missing: ['bad', 'This video is private, removed or unavailable in your country.'],
-    badid: ['bad', 'This YouTube link isn’t valid. Copy it again from YouTube with Share → Copy link.'],
-    config: ['bad', 'YouTube refused the player here. Serve the app from a web address (for example run npx serve) instead of opening the file directly.'],
-    html5: ['bad', 'YouTube couldn’t play this video in the browser.'],
-    error: ['bad', 'YouTube couldn’t play this video.']
+    loading: 'Loading YouTube…',
+    blocked: 'YouTube can’t load here. Use the options below.',
+    noembed: 'The owner only allows this video on YouTube.',
+    missing: 'This video is private or unavailable.',
+    badid: 'This YouTube link isn’t valid.',
+    config: 'YouTube refused to play here.',
+    html5: 'YouTube couldn’t play this video.',
+    error: 'YouTube couldn’t play this video.'
   }[P.ytState];
-  const file = location.protocol === 'file:' && P.ytState !== 'ok';
-  return msg ? `<div class="notice ${msg[0]}" style="margin:0">${msg[1]}${file && P.ytState !== 'config' ? ' YouTube also needs the app served from a web address, not opened as a file.' : ''}</div>` : '';
+  return msg ? `<div class="note ${P.ytState === 'loading' ? '' : 'warn'}">${msg}</div>` : '';
 }
 function ytPanel() {
-  const real = DEVICES.find(d => d.id === S.device)?.real || !S.settings.demo;
-  return `<section class="panel yt-tv"><h2>${icon('tv')} Put this YouTube video on a real TV${real ? '' : '<span class="muted" style="font-weight:500"> · the demo TV above is a preview</span>'}</h2>
-    <div class="yt-opts">
-      <div><b>Cast from the YouTube app</b>Opens the video at ${fmt(P.pos)}. On a phone it opens the YouTube app: tap the Cast button and pick your TV.
-        <span class="actions"><a class="btn primary sm" href="${esc(ytLink())}" target="_blank" rel="noopener">Open in YouTube ↗</a><button class="icon-btn" data-act="ytCopy" title="Copy link" aria-label="Copy YouTube link">${icon('copy')}</button></span></div>
-      <div><b>Link with TV code</b>On the TV’s YouTube app: Settings → Link with TV code. Then in YouTube on your phone: Settings → Watch on TV → Enter TV code.</div>
-      <div><b>Mirror this tab</b>Sends this tab, sound included, to any TV your browser can cast to.
-        <button class="btn sm" data-act="ytMirror">${icon('mirror')}Set up mirroring</button></div>
-    </div></section>`;
+  return `<section class="panel"><details class="more" ${S.device && S.device !== 'local' ? 'open' : ''}><summary><span class="label">YouTube on the TV</span></summary><div class="body">
+    <div class="muted" style="font-size:14px">YouTube only casts from its own app.</div>
+    <div class="pills" style="justify-content:flex-start"><a class="btn sm acc" href="${esc(ytLink())}" target="_blank" rel="noopener">Open in YouTube</a><button class="btn sm" data-act="ytCopy">${icon('copy')}Link</button><button class="btn sm" data-act="ytMirror">${icon('mirror')}Mirror</button></div>
+    <div class="muted" style="font-size:13px">Or on the TV: YouTube → Settings → Link with TV code.</div></div></details></section>`;
 }
 
 function renderScreen() {
   const el = $('#screen'); if (!el) return;
   const it = P.item;
-  if (!it) {
-    el.innerHTML = `<div class="poster" style="background:radial-gradient(circle at 50% 40%, #1d2633, #05070a 70%)"><p style="opacity:.6">${S.device ? esc(devName()) + ' is ready' : 'Connect a screen'}</p></div>`;
-    $('#srcState') && ($('#srcState').textContent = '');
-    return;
-  }
-  el.innerHTML = `<div class="poster" style="${poster(it.title)}"><h3>${esc(it.title)}</h3><p>${esc(fmtOf(it.url))} · ${esc(it.res || '')}</p></div>
-    <div class="osd"><span class="rec"><span class="dot"></span>${esc(devName())}</span><span id="osdTime">${P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur)}</span></div>
-    <div class="cue" id="cue" hidden></div><div class="pause-ind" id="pauseInd" ${P.playing ? 'hidden' : ''}><span>${icon('pause')}</span></div>`;
+  if (!it) { el.innerHTML = `<div class="idle">${S.device ? esc(devName()) : 'No screen'}</div>`; return; }
+  el.innerHTML = `<div class="poster" style="${poster(it.title)}"><h3>${esc(it.title)}</h3></div>
+    <div class="osd"><span><i class="live-dot" style="background:${P.playing ? 'var(--warm)' : 'rgba(255,255,255,.5)'}"></i>${esc(devName())}</span><span id="osdTime">${P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur)}</span></div>
+    <div class="cue" id="cue" hidden></div>`;
   video.hidden = !P.real;
   el.insertBefore(video, el.querySelector('.osd'));
-  $('#srcState').textContent = P.real ? 'Streaming' : P.yt ? (P.ytState === 'ok' ? 'YouTube player' : 'Receiver preview') : 'Receiver preview';
   tick(true);
   placeYT();
 }
-
 function renderMirrorScreen() {
   const el = $('#mscreen'); if (!el) return;
-  if (!M.stream) {
-    el.innerHTML = `<div class="mirror-idle">${icon('mirror')}<b>${canCapture ? 'Nothing shared yet' : 'Screen capture isn’t available'}</b><span>${canCapture ? 'Press Start mirroring, then pick a screen, window or tab.' : 'This browser can’t capture the screen. Use the built-in mirroring steps below.'}</span></div>`;
-    return;
-  }
-  el.innerHTML = `<div class="osd"><span class="rec"><span class="rec-dot"></span>MIRROR · ${esc(devName())}</span><span id="mTime2"></span></div>`;
+  if (!M.stream) { el.innerHTML = `<div class="idle">${canCapture ? 'Not sharing' : 'Use the steps below'}</div>`; return; }
+  el.innerHTML = `<div class="osd"><span><i class="live-dot"></i>${esc(devName())}</span><span id="mTime2"></span></div>`;
   el.insertBefore(mvid, el.firstChild);
   mvid.play().catch(() => {});
 }
 
 function tick(full) {
   const pct = !P.live && P.dur ? Math.min(100, P.pos / P.dur * 100) : (P.item ? 100 : 0);
-  const bar = $('#miniBar'); if (bar) bar.style.width = pct + '%';
-  const mt = $('#miniTime'); if (mt) mt.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
   const sk = $('#seek');
   if (sk && document.activeElement !== sk) { sk.value = Math.round(P.pos); sk.style.setProperty('--p', pct + '%'); }
   const tp = $('#tPos'); if (tp) tp.textContent = fmt(P.pos);
   const td = $('#tDur'); if (td) td.textContent = P.live ? 'LIVE' : '-' + fmt(Math.max(0, P.dur - P.pos));
   const ot = $('#osdTime'); if (ot) ot.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
-  const pi = $('#pauseInd'); if (pi) pi.hidden = P.playing;
+  const arc = $('#arc'); if (arc) arc.setAttribute('stroke-dasharray', `${(P.item ? pct / 100 : 0) * CIRC} ${CIRC}`);
+  const mr = $('#miniRing'); if (mr) mr.setAttribute('stroke-dasharray', `${pct / 100 * 144.5} 144.5`);
+  const mt = $('#miniTime'); if (mt) mt.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
   const cue = $('#cue');
   if (cue) {
     const c = P.subs && P.subs.find(c => P.pos >= c.a && P.pos <= c.z);
     cue.hidden = !c; if (c) cue.textContent = c.text;
     cue.style.fontSize = { Small: '12px', Medium: '15px', Large: '19px' }[S.settings.subSize];
   }
-  if (full) { renderMini(); const tb = document.querySelector('[data-act="toggle"]'); if (tb) { tb.innerHTML = icon(P.playing ? 'pause' : 'play'); tb.setAttribute('aria-label', P.playing ? 'Pause' : 'Play'); } }
+  if (full) {
+    renderMini();
+    const tb = $('.transport [data-act="toggle"]'); if (tb) { tb.innerHTML = icon(P.playing ? 'pause' : 'play'); tb.setAttribute('aria-label', P.playing ? 'Pause' : 'Play'); }
+  }
 }
-
 function renderMini() {
   const m = $('#mini');
   const it = P.item;
+  m.hidden = S.view === 'player' || S.view === 'mirror' || (!it && !M.stream);
+  if (m.hidden) return;
   if (M.stream) {
-    m.innerHTML = `<div class="bar"><i style="width:100%;background:var(--bad)"></i></div><span class="rec-dot"></span>
-      <div class="meta" data-act="openMirror"><div class="t">Mirroring your screen</div><div class="s"><span class="mono" id="mMini">${fmt((Date.now() - M.at) / 1000)}</span><span>· ${esc(devName())}</span></div></div>
-      <div class="ctl"><button class="btn sm" data-act="stopMirror">${icon('stop')}Stop</button></div>`;
+    m.innerHTML = `<span class="round sm" style="color:var(--warm)">${icon('mirror')}</span><div class="meta" data-act="openMirror"><div class="t">Mirroring</div><div class="s"><span id="mMini">${fmt((Date.now() - M.at) / 1000)}</span></div></div>
+      <button class="round sm" data-act="stopMirror" aria-label="Stop mirroring">${icon('stop')}</button>`;
     return;
   }
-  if (!it) {
-    m.innerHTML = `<div class="bar"><i id="miniBar"></i></div><div class="meta"><div class="t muted" style="font-weight:600">${S.device === 'local' ? 'Playing on this device' : S.device ? 'Connected to ' + esc(devName()) : 'Not connected'}</div><div class="s">Nothing playing${S.queue.length ? ' · ' + S.queue.length + ' in queue' : ''}</div></div>
-      <div class="ctl">${S.queue.length ? `<button class="btn primary sm" data-act="next">${icon('play')}Play queue</button>` : ''}</div>`;
-    return;
-  }
-  m.innerHTML = `<div class="bar"><i id="miniBar"></i></div>${thumb(it)}
-    <div class="meta" data-act="openPlayer"><div class="t">${esc(it.title)}</div><div class="s"><span class="mono" id="miniTime"></span><span>· ${esc(devName())}</span></div></div>
-    <div class="ctl"><button class="icon-btn hide-sm" data-act="back" aria-label="Back ${S.settings.skip} seconds">${icon('back')}</button>
-      <button class="icon-btn play" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}">${icon(P.playing ? 'pause' : 'play')}</button>
-      <button class="icon-btn hide-sm" data-act="fwd" aria-label="Forward ${S.settings.skip} seconds">${icon('fwd')}</button>
-      <button class="icon-btn" data-act="next" aria-label="Next in queue">${icon('next')}</button></div>`;
+  m.innerHTML = `<div class="ring">${thumb(it)}<svg viewBox="0 0 50 50" aria-hidden="true"><circle id="miniRing" cx="25" cy="25" r="23" stroke-dasharray="0 144.5"/></svg></div>
+    <div class="meta" data-act="openPlayer"><div class="t">${esc(it.title)}</div><div class="s"><span id="miniTime"></span><span>${esc(devName())}</span></div></div>
+    <button class="round sm acc" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}">${icon(P.playing ? 'pause' : 'play')}</button>
+    ${S.queue.length ? `<button class="round sm" data-act="next" aria-label="Next">${icon('next')}</button>` : ''}`;
   tick();
 }
 
 function render() {
-  document.querySelectorAll('#nav button').forEach(b => b.dataset.view === S.view ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
-  $('#qBadge').textContent = S.queue.length;
-  const dev = DEVICES.find(d => d.id === S.device);
-  $('#castLabel').textContent = dev ? dev.name : S.device === 'local' ? 'This device' : 'Not connected';
-  $('#castBtn').classList.toggle('on', !!dev);
   if (video.parentNode !== document.body) document.body.appendChild(video);
   if (mvid.parentNode !== document.body) document.body.appendChild(mvid);
-  main.innerHTML = `<div class="view">${views[S.view]()}</div>`;
+  main.innerHTML = S.view === 'home' ? homeView() : sectionView(S.view);
+  if (S.view === 'home') drawDial();
   if (S.view === 'player') renderScreen();
   if (S.view === 'mirror') renderMirrorScreen();
   placeYT();
   renderMini();
 }
 
-/* ---------- Device sheet ---------- */
+/* ---------- Screen picker ---------- */
 const scrim = $('#scrim');
+function closeSheet() {
+  if (sheetKind === 'devices' && N.on) ncall('stopScan').catch(() => {});
+  scrim.hidden = true; sheetKind = '';
+}
 function openDevices() {
-  S.scanning = true; drawDevices(); scrim.hidden = false;
-  setTimeout(() => { S.scanning = false; if (!scrim.hidden) drawDevices(); }, 1600);
+  sheetKind = 'devices'; scrim.hidden = false;
+  if (N.on) { N.scanning = true; ncall('scan').catch(e => { N.scanning = false; toast(e.message); drawDevices(); }); }
+  drawDevices();
 }
 function drawDevices() {
-  const list = DEVICES.filter(d => d.real || S.settings.demo);
-  const shown = S.scanning ? list.slice(0, 3) : list;
-  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="devTitle">
-    <header><h2 id="devTitle">Cast to</h2><button class="icon-btn" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
-    <div class="scan"><span class="radar ${S.scanning ? 'on' : ''}"></span>${S.scanning ? 'Looking for screens on your Wi-Fi…' : `${list.length} screens found on your network`}</div>
-    ${shown.map(d => `<button class="dev ${d.id === S.device ? 'on' : ''}" data-dev="${d.id}"><span class="ico">${icon(d.icon)}</span><span class="dm"><b>${esc(d.name)}</b><span>${esc(d.kind)}${d.real ? '' : ' · demo'}</span></span>${d.id === S.device ? '<span class="state">CONNECTED</span>' : ''}</button>`).join('')}
-    <button class="dev ${S.device === 'local' ? 'on' : ''}" data-dev="local"><span class="ico">${icon('phone')}</span><span class="dm"><b>Play on this device</b><span>Watch here instead of casting</span></span></button>
-    <footer><button class="btn" data-act="mirrorFromSheet">${icon('mirror')}Mirror screen</button><div style="flex:1"></div><button class="btn ghost" data-act="rescan">${icon('refresh')}Scan again</button>${S.device ? `<button class="btn" data-act="disconnect">Disconnect</button>` : ''}</footer></div>`;
-  scrim.querySelector('.dev')?.focus();
+  const list = deviceList(), found = list.filter(d => d.native).length;
+  const status = N.on
+    ? (N.scanning ? `Searching your Wi-Fi${found ? ` · ${found} found` : '…'}` : found ? `${found} screen${found > 1 ? 's' : ''} found` : 'No screens found')
+    : 'Searching your Wi-Fi needs the Android app';
+  const row = (id, ic, name, sub, on) => `<button class="dev ${on ? 'on' : ''}" data-dev="${esc(id)}"><span class="round">${icon(ic)}</span><span class="dm"><b>${esc(name)}</b><span>${esc(sub)}</span></span>${on ? '<span class="state">ON</span>' : ''}</button>`;
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-label="Choose a screen"><div class="grab"></div>
+    <header><span class="label grow">Cast to</span><button class="round sm" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
+    <div class="scan"><span class="radar ${N.scanning ? 'on' : ''}"></span>${esc(status)}</div>
+    ${list.map(d => row(d.id, d.icon, d.name, [d.kind, d.detail, d.demo && 'demo'].filter(Boolean).join(' · '), d.id === S.device)).join('')}
+    ${row('local', 'phone', 'This device', 'Play here', S.device === 'local')}
+    ${N.on && !N.scanning && !found ? `<div class="note sheet-note">The phone and the screen must be on the same Wi-Fi, and the screen must support Google Cast or DLNA. For a car screen, join the car’s Wi-Fi or connect the car to your phone’s hotspot.</div>` : ''}
+    ${!N.on && isAndroid ? `<div class="note sheet-note">Get the StreamBeam app to find TVs and car screens on your Wi-Fi.<div class="acts"><a class="btn sm acc" href="https://github.com/elrity/streambeam/releases/latest" target="_blank" rel="noopener">Get the app</a></div></div>` : ''}
+    <footer>${N.on ? `<button class="btn sm" data-act="rescan">${icon('refresh')}Search again</button>` : ''}<button class="btn sm" data-act="mirrorFromSheet">${icon('mirror')}Mirror</button>${S.device ? '<button class="btn sm flat" data-act="disconnect">Disconnect</button>' : ''}</footer></div>`;
+}
+function pickDevice(id) {
+  const d = deviceList().find(x => x.id === id);
+  if (nativeOn() && S.device !== id) { extCmd('stop'); P.ext = ''; P.playing = false; }
+  S.device = id; S.deviceName = d?.name || ''; save(); closeSheet();
+  if (id === 'remote') promptRemote();
+  else if (id === 'vlc') vlcConnect().then(ok => { if (ok && P.item && canVlc(P.item.url)) playItem(P.item, { from: P.pos }); });
+  else if (d?.native) {
+    ncall('connect', { deviceId: id.slice(2) }).then(() => {
+      toast('Connected to ' + d.name);
+      if (P.item && castable(P.item.url)) playItem(P.item, { from: P.pos });
+    }).catch(e => toast(e.message));
+  } else toast(id === 'local' ? 'Playing on this device' : `Connected to ${d?.name}`);
+  render();
 }
 scrim.addEventListener('click', e => {
-  if (e.target === scrim) { scrim.hidden = true; return; }
+  if (e.target === scrim) { closeSheet(); return; }
   const b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.act === 'closeDev') scrim.hidden = true;
-  else if (b.dataset.act === 'rescan') openDevices();
-  else if (b.dataset.act === 'vlcCopy') { navigator.clipboard.writeText(vlcSheetItem.url).then(() => toast('Link copied. Paste it in VLC.'), () => toast('Copy blocked. Select the link above.')); }
-  else if (b.dataset.act === 'vlcM3u') saveM3u([vlcSheetItem], vlcSheetItem.title);
-  else if (b.dataset.act === 'vlcSend') { scrim.hidden = true; S.device = 'vlc'; save(); if (canVlc(vlcSheetItem.url)) playItem(vlcSheetItem); else toast('VLC can’t open files from the browser'); }
-  else if (b.dataset.act === 'mirrorFromSheet') { scrim.hidden = true; S.view = 'mirror'; render(); }
-  else if (b.dataset.act === 'disconnect') { S.device = ''; save(); scrim.hidden = true; toast('Disconnected'); render(); }
-  else if ('dev' in b.dataset) {
-    S.device = b.dataset.dev; save(); scrim.hidden = true;
-    if (S.device === 'remote') promptRemote();
-    else if (S.device === 'vlc') { vlcConnect().then(ok => { if (ok && P.item && canVlc(P.item.url)) playItem(P.item, { from: P.pos }); }); S.view = 'player'; }
-    else toast(S.device === 'local' ? 'Playing on this device' : `Connected to ${devName()}`);
-    render();
+  const act = b.dataset.act;
+  if (act === 'closeDev') closeSheet();
+  else if (act === 'rescan') openDevices();
+  else if (act === 'vlcCopy') navigator.clipboard.writeText(vlcSheetItem.url).then(() => toast('Link copied'), () => toast('Copy blocked'));
+  else if (act === 'vlcM3u') saveM3u([vlcSheetItem], vlcSheetItem.title);
+  else if (act === 'vlcSend') { closeSheet(); S.device = 'vlc'; save(); if (canVlc(vlcSheetItem.url)) playItem(vlcSheetItem); else toast('VLC can’t open files from here'); }
+  else if (act === 'mirrorFromSheet') { closeSheet(); go('mirror'); }
+  else if (act === 'disconnect') {
+    if (S.device.startsWith('n:')) { extCmd('stop'); ncall('disconnect').catch(() => {}); P.ext = ''; P.playing = false; }
+    S.device = ''; S.deviceName = ''; save(); closeSheet(); toast('Disconnected'); render();
   }
+  else if ('dev' in b.dataset) pickDevice(b.dataset.dev);
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !scrim.hidden) { scrim.hidden = true; $('#castBtn').focus(); return; }
+  if (e.key === 'Escape' && !scrim.hidden) { closeSheet(); return; }
   if (e.target.matches('input, textarea, select')) return;
   if (e.key === ' ' && P.item) { e.preventDefault(); toggle(); }
   if (e.key === 'ArrowLeft') seek(P.pos - S.settings.skip);
   if (e.key === 'ArrowRight') seek(P.pos + S.settings.skip);
-  if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) { S.view = 'today'; render(); $('#askInput')?.focus(); e.preventDefault(); }
+  if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) { go('today'); $('#askInput')?.focus(); e.preventDefault(); }
 });
 
 /* ---------- Events ---------- */
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2400); }
-
-$('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) { S.view = b.dataset.view; render(); main.scrollTop = 0; } });
-$('#castBtn').addEventListener('click', openDevices);
-$('#themeBtn').addEventListener('click', () => {
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+{ const t = store.get('theme', null); if (t) document.documentElement.dataset.theme = t; }
+function toggleTheme() {
   const r = document.documentElement;
-  const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches || !matchMedia('(prefers-color-scheme: light)').matches;
+  const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   r.dataset.theme = dark ? 'light' : 'dark';
   store.set('theme', r.dataset.theme);
-});
-{ const t = store.get('theme', null); if (t) document.documentElement.dataset.theme = t; }
-
+  $('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(r).getPropertyValue('--bg').trim());
+}
 function findItem(row) {
   const list = row.closest('[data-list]')?.dataset.list; const id = row.dataset.id;
   const src = { detected: S.detected, queue: S.queue, local: S.local, history: S.history, bookmarks: S.bookmarks }[list] || [];
   return { list, arr: src, idx: src.findIndex(x => x.id === id), item: src.find(x => x.id === id) };
 }
+const RATES = [1, 1.25, 1.5, 2, .5, .75];
 
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-act],[data-site],[data-ch],[data-group],[data-ask],[data-copyask]');
+  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-ask],[data-copyask]');
   if (!b || scrim.contains(b)) return;
+  if (b.dataset.go) return go(b.dataset.go);
   if (b.dataset.ask) return ask(b.dataset.ask);
   if (b.dataset.copyask) {
     const t = TILES.find(x => x.id === b.dataset.copyask);
-    navigator.clipboard.writeText(t.prompt()).then(() => toast('Question copied. Paste it in Gemini.'), () => toast('Opening Gemini. Ask: ' + t.label));
+    navigator.clipboard.writeText(t.prompt()).then(() => toast('Question copied. Paste it in Gemini.'), () => toast('Ask Gemini: ' + t.label));
     return;
   }
   if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
@@ -1562,37 +1506,45 @@ document.addEventListener('click', async e => {
   const act = b.dataset.act;
   const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
   switch (act) {
+    case 'home': goHome(); break;
+    case 'theme': toggleTheme(); break;
     case 'cast': if (ctx.list === 'queue') { S.queue.splice(ctx.idx, 1); save(); } playItem(ctx.item, ctx.list === 'history' ? { from: ctx.item.pos > 5 ? ctx.item.pos : 0 } : {}); break;
-    case 'enqueue': S.queue.push({ ...ctx.item, id: uid() }); save(); toast(`Added to queue · ${S.queue.length} up next`); render(); break;
-    case 'queueAll': S.detected.forEach(m => S.queue.push({ ...m, id: uid() })); save(); toast(`Queued ${S.detected.length} videos`); render(); break;
-    case 'copy': try { await navigator.clipboard.writeText(ctx.item.url); toast('Link copied'); } catch { toast('Copy blocked. Select the link text instead.'); } break;
+    case 'enqueue': S.queue.push({ ...ctx.item, id: uid() }); save(); toast(`Queued · ${S.queue.length}`); render(); break;
+    case 'queueAll': S.detected.forEach(m => S.queue.push({ ...m, id: uid() })); save(); toast(`Queued ${S.detected.length}`); render(); break;
     case 'remove': S.queue.splice(ctx.idx, 1); save(); render(); break;
-    case 'up': case 'down': { const j = ctx.idx + (act === 'up' ? -1 : 1); [S.queue[ctx.idx], S.queue[j]] = [S.queue[j], S.queue[ctx.idx]]; save(); render(); break; }
-    case 'clearQueue': S.queue = []; save(); toast('Queue cleared'); render(); break;
-    case 'clearHistory': S.history = []; save(); toast('History cleared'); render(); break;
+    case 'up': { const j = ctx.idx - 1; [S.queue[ctx.idx], S.queue[j]] = [S.queue[j], S.queue[ctx.idx]]; save(); render(); break; }
+    case 'clearQueue': S.queue = []; save(); render(); break;
+    case 'clearHistory': S.history = []; save(); render(); break;
+    case 'libTab': S.libTab = b.dataset.tab; render(); break;
     case 'toggle': toggle(); break;
     case 'back': seek(P.pos - S.settings.skip); break;
     case 'fwd': seek(P.pos + S.settings.skip); break;
-    case 'stop': stop(); toast('Stopped casting'); break;
+    case 'stop': stop(); break;
     case 'next': next(); break;
-    case 'mute': P.muted = !P.muted; video.muted = P.muted; if (ytOn()) P.muted ? Y.player.mute() : Y.player.unMute(); send('volume', { val: P.muted ? 0 : Math.round(P.vol * 256) }); render(); break;
+    case 'rate': {
+      P.rate = RATES[(RATES.indexOf(P.rate) + 1) % RATES.length];
+      video.playbackRate = P.rate; if (ytOn()) Y.player.setPlaybackRate(P.rate); extCmd('rate', P.rate);
+      b.innerHTML = `<span class="mono">${P.rate}×</span>`; break;
+    }
+    case 'mute': P.muted = !P.muted; video.muted = P.muted; if (ytOn()) P.muted ? Y.player.mute() : Y.player.unMute(); extCmd('volume', P.muted ? 0 : P.vol); render(); break;
     case 'vlc': openVlcSheet(ctx.item || P.item); break;
-    case 'openToday': S.view = 'today'; render(); main.scrollTop = 0; $('#askInput')?.focus(); break;
-    case 'geminiSetup': S.view = 'settings'; render(); $('#geminiSettings')?.scrollIntoView(); $('#s-geminiKey')?.focus(); break;
+    case 'openToday': go('today'); break;
+    case 'geminiSetup': go('settings'); $('#s-geminiKey')?.focus(); break;
     case 'locate': locate(); break;
     case 'speak': speak(); break;
-    case 'copyAnswer': try { await navigator.clipboard.writeText(GM.answer.text); toast('Copied'); } catch { toast('Copy blocked. Select the text instead.'); } break;
+    case 'copyAnswer': try { await navigator.clipboard.writeText(GM.answer.text); toast('Copied'); } catch { toast('Copy blocked'); } break;
     case 'vlcConnect': S.settings.vlcBridge = ($('#vlcBridge')?.value || '').trim(); save(); vlcConnect(); break;
     case 'vlcUse': S.device = 'vlc'; save(); if (P.item) playItem(P.item, { from: P.pos }); else vlcConnect(); break;
     case 'queueM3u': saveM3u(S.queue, 'StreamBeam queue'); break;
-    case 'ytMirror': S.view = 'mirror'; M.surface = 'browser'; saveMirror(); render(); break;
-    case 'ytCopy': try { await navigator.clipboard.writeText(ytLink()); toast('YouTube link copied'); } catch { toast('Copy blocked. Use Open in YouTube instead.'); } break;
+    case 'ytMirror': M.surface = 'browser'; saveMirror(); go('mirror'); break;
+    case 'ytCopy': try { await navigator.clipboard.writeText(ytLink()); toast('Link copied'); } catch { toast('Copy blocked'); } break;
     case 'subs': if (P.subName) { P.subs = null; P.subName = ''; render(); } else $('#subFile').click(); break;
     case 'devices': openDevices(); break;
-    case 'openPlayer': S.view = 'player'; render(); break;
-    case 'openMirror': S.view = 'mirror'; render(); break;
+    case 'openPlayer': go('player'); break;
+    case 'openMirror': go('mirror'); break;
     case 'startMirror': startMirror(); break;
     case 'stopMirror': stopMirror(); break;
+    case 'nativeMirror': ncall('openCastSettings').catch(err => toast(err.message)); break;
     case 'bookmark': {
       const i = S.bookmarks.findIndex(x => x.url === S.url);
       if (i >= 0) { S.bookmarks.splice(i, 1); toast('Bookmark removed'); }
@@ -1600,8 +1552,8 @@ document.addEventListener('click', async e => {
       save(); render(); break;
     }
     case 'unbookmark': S.bookmarks.splice(ctx.idx, 1); save(); render(); break;
-    case 'openBm': S.view = 'browser'; browse(ctx.item.url); break;
-    case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`Loaded ${parseM3U(S.m3u).length} channels`); render(); break;
+    case 'openBm': go('browser'); browse(ctx.item.url); break;
+    case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`${parseM3U(S.m3u).length} channels`); render(); break;
     case 'm3uSample': S.m3u = SAMPLE_M3U; S.group = 'All'; save(); render(); break;
   }
 });
@@ -1617,7 +1569,12 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'seek') { t.style.setProperty('--p', (t.value / t.max * 100) + '%'); $('#tPos').textContent = fmt(+t.value); }
-  if (t.id === 'vol') { P.vol = t.value / 100; P.muted = P.vol === 0; video.volume = P.vol; video.muted = P.muted; if (ytOn()) { Y.player.setVolume(+t.value); P.muted ? Y.player.mute() : Y.player.unMute(); } clearTimeout(V.volT); V.volT = setTimeout(() => send('volume', { val: Math.round(P.vol * 256) }), 150); t.style.setProperty('--p', t.value + '%'); $('#volTxt').textContent = t.value; }
+  if (t.id === 'vol') {
+    P.vol = t.value / 100; P.muted = P.vol === 0; video.volume = P.vol; video.muted = P.muted;
+    if (ytOn()) { Y.player.setVolume(+t.value); P.muted ? Y.player.mute() : Y.player.unMute(); }
+    clearTimeout(V.volT); V.volT = setTimeout(() => extCmd('volume', P.vol), 150);
+    t.style.setProperty('--p', t.value + '%');
+  }
   if (t.id === 'chSearch') { S.chSearch = t.value; const pos = t.selectionStart; render(); const n = $('#chSearch'); n.focus(); n.setSelectionRange(pos, pos); }
 });
 document.addEventListener('change', async e => {
@@ -1626,26 +1583,25 @@ document.addEventListener('change', async e => {
   if (t.id?.startsWith('m-')) {
     const k = t.id.slice(2);
     M[k] = t.type === 'checkbox' ? t.checked : (k === 'fps' ? +t.value : t.value);
-    saveMirror(); if (k === 'audio') render();
+    saveMirror();
   }
-  if (t.id === 'rate') { P.rate = +t.value; video.playbackRate = P.rate; if (ytOn()) Y.player.setPlaybackRate(P.rate); send('rate', { val: P.rate }); }
   if (t.id?.startsWith('s-')) {
     const k = t.id.slice(2);
     S.settings[k] = t.type === 'checkbox' ? t.checked : k === 'skip' ? +t.value : k === 'units' ? { '°C': 'C', '°F': 'F' }[t.value] || '' : k === 'region' ? t.value.trim().toUpperCase() : ['vlcBridge', 'geminiKey', 'geminiModel'].includes(k) ? t.value.trim() : t.value;
     if (k === 'vlcBridge') V.ok = false;
-    if (k === 'demo' && !t.checked && S.device && S.device !== 'remote') S.device = '';
-    save(); toast('Saved'); render();
+    if (k === 'demo' && !t.checked && S.device.startsWith('demo-')) S.device = '';
+    save(); toast('Saved');
   }
   if (t.id === 'fileIn') addFiles(t.files);
-  if (t.id === 'tCity') { S.settings.city = t.value.trim(); save(); render(); }
+  if (t.id === 'tCity') { S.settings.city = t.value.trim(); save(); }
   if (t.id === 'm3uFile' && t.files[0]) { $('#m3uText').value = await t.files[0].text(); }
 });
 function addFiles(files) {
   [...files].forEach(f => {
     const url = URL.createObjectURL(f);
-    S.local.push({ id: uid(), title: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, url, res: f.type || 'video', size: (f.size / 1048576).toFixed(1) + ' MB', duration: 0 });
+    S.local.push({ id: uid(), title: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, url, res: '', size: (f.size / 1048576).toFixed(1) + ' MB', duration: 0 });
   });
-  toast(`Added ${files.length} file${files.length > 1 ? 's' : ''}`); render();
+  render();
 }
 ['dragover', 'dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => {
   const d = e.target.closest?.('#drop'); if (!d) return;
@@ -1653,18 +1609,20 @@ function addFiles(files) {
   if (ev === 'drop' && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 }));
 
-/* ---------- Boot: open in a realistic working state ---------- */
-load({ ...SITES[0].media[0], id: uid() }, 134);
-render();
+/* ---------- Boot ---------- */
+if (S.device.startsWith('n:') && !N.on) { S.device = ''; S.deviceName = ''; }
+{
+  /* Home-screen shortcuts open ?go=<tile|section>; #<section> links work too. Back from a section returns home. */
+  let goTo = new URLSearchParams(location.search).get('go') || location.hash.slice(1);
+  if (goTo === 'history' || goTo === 'bookmarks') { S.libTab = goTo; goTo = 'library'; }
+  try { history.replaceState({ sb: 'home' }, '', location.pathname); } catch {}
+  render();
+  if (TILES.some(t => t.id === goTo)) { go('today'); geminiStatus().then(() => ask(goTo)); }
+  else { if (goTo in TITLES) go(goTo); geminiStatus(); }
+}
 if (S.device === 'vlc') vlcConnect(true);
-/* Installable app: offline shell (only when served over http(s) from the StreamBeam server or any static host) */
+if (N.on && S.device.startsWith('n:')) ncall('scan', { quiet: true }).catch(() => {});
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
-geminiStatus().then(() => {
-  /* Home-screen shortcuts open ?go=<tile|view>; a #<tile|view> link works too */
-  const go = new URLSearchParams(location.search).get('go') || location.hash.slice(1);
-  if (TILES.some(t => t.id === go)) ask(go);
-  else if (views[go] && !go.startsWith('_')) { S.view = go; render(); }
-});
 })();
 </script>
 <!-- APP-END -->
