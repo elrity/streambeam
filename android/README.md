@@ -81,8 +81,9 @@ base64 -w0 streambeam.jks   # macOS: base64 -i streambeam.jks
 ```
 
 Add these repository secrets (Settings → Secrets and variables → Actions):
-`ANDROID_KEYSTORE_BASE64` (the base64 output), `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS` (`streambeam`), and `ANDROID_KEY_PASSWORD` if it differs.
+`ANDROID_KEYSTORE_BASE64` (the base64 output) and `ANDROID_KEYSTORE_PASSWORD`.
+Add `ANDROID_KEY_ALIAS` only if the alias isn't `streambeam`, and
+`ANDROID_KEY_PASSWORD` only if the key password differs.
 Keep `streambeam.jks` safe: losing it means users must reinstall. Then update
 `ANDROID_CERT_SHA256` on the server with the new fingerprint.
 
