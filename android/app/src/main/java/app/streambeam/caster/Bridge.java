@@ -32,16 +32,17 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private JavaScriptReplyProxy reply;
     private boolean scanning;
     private String active;
-    private final Runnable endScan = () -> {
-        this.scanning = false;
-        this.cast.stopActiveScan();
-        this.devicesChanged();
-    };
+    private final Runnable endScan;
 
     Bridge(Activity activity) {
         this.activity = activity;
         cast = CastHelper.create(activity, this);
         dlna = new Dlna(activity, this);
+        endScan = () -> {
+            scanning = false;
+            cast.stopActiveScan();
+            devicesChanged();
+        };
     }
 
     @Override
