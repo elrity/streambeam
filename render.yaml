@@ -1,0 +1,26 @@
+# Optional: Render Blueprint for the StreamBeam server (web/). GitHub Pages hosts the app for free;
+# use Render only if you want the server features (shared Gemini key, app password).
+# Render → New → Blueprint → pick this repository; it asks for the secret values below.
+services:
+  - type: web
+    name: streambeam
+    runtime: docker
+    dockerfilePath: ./web/Dockerfile
+    dockerContext: ./web
+    buildFilter:
+      paths:
+        - web/**
+    plan: free
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: APP_PASSWORD        # the browser asks for it; keeps strangers off your Gemini key
+        sync: false
+      - key: GEMINI_API_KEY      # from aistudio.google.com/apikey; leave empty to just open Gemini
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: TRUST_PROXY         # Render's proxy forwards the visitor's address
+        value: "true"
+      - key: BIND
+        value: 0.0.0.0

@@ -1,0 +1,25 @@
+{
+  "name": "StreamBeam Caster",
+  "short_name": "StreamBeam",
+  "description": "Cast web videos, YouTube and IPTV to your TV, mirror your screen, and get today's news and weather from Gemini.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "categories": ["entertainment", "news", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "shortcuts": [
+    { "name": "Today's news", "short_name": "News", "description": "Top news from Gemini", "url": "./?go=news", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Weather", "short_name": "Weather", "description": "Today's weather from Gemini", "url": "./?go=weather", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Ask Gemini", "short_name": "Gemini", "description": "News, weather, sports and markets", "url": "./?go=today", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Mirror screen", "short_name": "Mirror", "description": "Mirror your screen to the TV", "url": "./?go=mirror", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

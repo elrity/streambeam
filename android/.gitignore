@@ -1,0 +1,8 @@
+# written by configure.mjs for each build
+twa.properties
+app/src/main/res/values/twa.xml
+app/src/main/res/xml/
+build/
+app/build/
+.gradle/
+local.properties

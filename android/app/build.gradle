@@ -1,0 +1,54 @@
+// StreamBeam for Android: a Trusted Web Activity that opens the hosted app full screen.
+// Run `node configure.mjs https://your-app-address` first; it writes twa.properties and the URL-specific resources.
+plugins {
+    id 'com.android.application'
+}
+
+def twaFile = rootProject.file('twa.properties')
+if (!twaFile.exists()) throw new GradleException('Run `node configure.mjs https://your-app-address` in android/ first.')
+def twa = new Properties()
+twaFile.withInputStream { twa.load(it) }
+
+// Release signing comes from the environment (GitHub secrets); without it the build uses the debug key.
+def keystore = System.getenv('ANDROID_KEYSTORE_FILE')
+
+android {
+    namespace 'app.streambeam.caster'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId twa.getProperty('applicationId')
+        minSdk 21
+        targetSdk 35
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName twa.getProperty('versionName', '1.0')
+        manifestPlaceholders = [hostName: twa.getProperty('host'), defaultUrl: twa.getProperty('url')]
+    }
+
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

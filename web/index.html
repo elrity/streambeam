@@ -1,0 +1,1672 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StreamBeam">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<!-- APP-START -->
+<title>StreamBeam Video Caster</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<style>
+/* Layout: app shell — top bar, left nav rail (bottom tabs on phones), main pane, persistent cast mini-remote at the bottom. Dark-first like a living-room remote. */
+:root {
+  --bg: #0d1117; --panel: #151b24; --panel-2: #1c2430; --line: #2a3443;
+  --fg: #e9edf3; --muted: #8d98aa; --accent: #ff8a3d; --accent-ink: #1b0d03;
+  --accent-soft: rgba(255,138,61,.14); --ok: #3ccf91; --warn: #f2c14e; --bad: #ff5d6c;
+  --tv: #05070a; --shadow: 0 18px 50px rgba(0,0,0,.45);
+  --f-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f2f4f7; --panel: #ffffff; --panel-2: #eaeef3; --line: #d5dce6;
+  --fg: #121820; --muted: #566175; --accent: #d25a0b; --accent-ink: #ffffff;
+  --accent-soft: rgba(210,90,11,.10); --ok: #138a5a; --warn: #a77700; --bad: #c8283a;
+  --tv: #0b0e13; --shadow: 0 18px 40px rgba(20,30,45,.16); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f2f4f7; --panel: #ffffff; --panel-2: #eaeef3; --line: #d5dce6;
+  --fg: #121820; --muted: #566175; --accent: #d25a0b; --accent-ink: #ffffff;
+  --accent-soft: rgba(210,90,11,.10); --ok: #138a5a; --warn: #a77700; --bad: #c8283a;
+  --tv: #0b0e13; --shadow: 0 18px 40px rgba(20,30,45,.16); color-scheme: light; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--f-body); overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+svg.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+
+.app { height: 100%; display: grid; grid-template-columns: 216px minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto; grid-template-areas: "top top" "nav main" "mini mini"; }
+
+/* Top bar */
+.top { grid-area: top; display: flex; align-items: center; gap: 12px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-bottom: 1px solid var(--line); background: var(--panel); }
+.brand { flex: none; display: flex; align-items: center; gap: 10px; font: 800 19px/1 var(--f-display); letter-spacing: -.01em; white-space: nowrap; }
+.brand .mark { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }
+.brand .mark svg { width: 18px; height: 18px; stroke-width: 2.2; }
+.top .spacer { flex: 1; }
+.cast-btn { min-width: 0; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 600; font-size: 14px; max-width: 50vw; }
+.cast-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cast-btn.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 999px; border: 1px solid transparent; background: transparent; }
+.icon-btn:hover { background: var(--panel-2); }
+
+/* Nav */
+.nav { grid-area: nav; border-right: 1px solid var(--line); background: var(--panel); padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.nav button { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 600; text-align: left; }
+.nav button:hover { color: var(--fg); background: var(--panel-2); }
+.nav button[aria-current="page"] { color: var(--fg); background: var(--accent-soft); }
+.nav button[aria-current="page"] svg { color: var(--accent); }
+.nav .badge { margin-left: auto; font: 600 11px/1 var(--f-mono); padding: 3px 6px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.nav .sep { height: 1px; background: var(--line); margin: 8px 6px; }
+
+/* Main */
+.main { grid-area: main; overflow-y: auto; padding-block: 22px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.view { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.view-head { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.view-head h1 { margin: 0; font: 800 clamp(24px, 3.4vw, 32px)/1.1 var(--f-display); letter-spacing: -.02em; text-wrap: balance; }
+.view-head p { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.view-head .grow { flex: 1; min-width: 0; }
+.eyebrow { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); }
+.panel-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.panel-h h2 { margin: 0; font: 700 15px/1.2 var(--f-body); }
+.panel-h .grow { flex: 1; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--fg); background: var(--panel-2); }
+.btn.sm { padding: 6px 10px; font-size: 13px; }
+.btn svg.i { width: 17px; height: 17px; }
+
+/* Browser */
+.urlbar { display: flex; gap: 8px; padding: 10px; align-items: center; }
+.urlbar .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 42px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.urlbar .field:focus-within { border-color: var(--accent); }
+.urlbar input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-family: var(--f-mono); font-size: 13px; }
+.urlbar .star.on { color: var(--warn); }
+.urlbar .star.on svg { fill: currentColor; }
+.notice { margin: 0 10px 10px; padding: 10px 12px; border-radius: 8px; font-size: 13.5px; background: var(--panel-2); border-left: 3px solid var(--warn); }
+.notice.ok { border-left-color: var(--ok); }
+
+.sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.site { text-align: left; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; gap: 6px; }
+.site:hover { border-color: var(--accent); }
+.site b { font: 700 15px/1.25 var(--f-body); }
+.site small { color: var(--muted); font-family: var(--f-mono); font-size: 11.5px; overflow-wrap: anywhere; }
+.site span { color: var(--muted); font-size: 13px; }
+
+/* Media rows */
+.list { display: flex; flex-direction: column; }
+.row { display: grid; grid-template-columns: 84px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--line); }
+.list > .row:first-child { border-top: 0; }
+.row.playing { background: var(--accent-soft); }
+.thumb { width: 84px; aspect-ratio: 16/9; max-width: 100%; border-radius: 6px; position: relative; overflow: hidden; display: grid; place-items: center; color: rgba(255,255,255,.92); font: 800 13px/1 var(--f-display); text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+.thumb .dur { position: absolute; right: 4px; bottom: 4px; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,.72); color: #fff; font: 600 10px/1.3 var(--f-mono); text-shadow: none; }
+.meta { min-width: 0; }
+.meta .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta .s { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.meta .u { font: 11.5px/1.3 var(--f-mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font: 600 10.5px/1.4 var(--f-mono); letter-spacing: .04em; border: 1px solid var(--line); color: var(--muted); }
+.chip.fmt-MP4 { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.chip.fmt-HLS { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.chip.fmt-YOUTUBE { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.chip.fmt-DASH, .chip.fmt-MKV { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.chip.live { color: #fff; background: var(--bad); border-color: var(--bad); }
+.actions { display: flex; gap: 6px; align-items: center; }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); }
+.empty b { display: block; color: var(--fg); font-size: 15px; margin-bottom: 4px; }
+
+/* Now playing */
+.np { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+.tv { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
+.screen { position: relative; aspect-ratio: 16/9; max-width: 100%; border-radius: 6px; overflow: hidden; background: var(--tv); }
+.screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.screen .poster { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 6%; color: #fff; }
+.screen .poster h3 { margin: 0; font: 800 clamp(20px, 3.6vw, 40px)/1.05 var(--f-display); letter-spacing: -.02em; text-shadow: 0 2px 12px rgba(0,0,0,.4); text-wrap: balance; }
+.screen .poster p { margin: 6px 0 0; font: 500 12px/1.4 var(--f-mono); opacity: .85; }
+.screen .osd { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; padding: 10px 12px; font: 600 11px/1 var(--f-mono); color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.screen .osd .rec { display: inline-flex; gap: 6px; align-items: center; }
+.screen .osd .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(60,207,145,.25); }
+.screen .cue { position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%); max-width: 86%; text-align: center; padding: 3px 8px; border-radius: 3px; background: rgba(0,0,0,.72); color: #fff; font-weight: 600; }
+.screen .pause-ind { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.screen .pause-ind span { width: 64px; height: 64px; border-radius: 50%; background: rgba(0,0,0,.5); display: grid; place-items: center; color: #fff; }
+.screen .pause-ind svg { width: 30px; height: 30px; }
+.tv-foot { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px 0; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.screen.idle .poster { justify-content: center; align-items: center; text-align: center; }
+
+.remote { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.remote .title { font: 800 20px/1.2 var(--f-display); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.seek { display: flex; flex-direction: column; gap: 4px; }
+.seek .times { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); }
+input[type=range]::-moz-range-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--p, 0%), var(--line) var(--p, 0%)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5.5px; border-radius: 50%; background: var(--fg); border: 0; }
+input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--fg); border: 0; }
+.transport { display: flex; justify-content: center; align-items: center; gap: 10px; }
+.transport .icon-btn { width: 46px; height: 46px; border-color: var(--line); background: var(--panel-2); }
+.transport .icon-btn { position: relative; }
+.transport .big { width: 64px; height: 64px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.transport .big svg { width: 26px; height: 26px; }
+.transport .big:hover { background: var(--accent); filter: brightness(1.06); }
+.knobs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.knob { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); }
+.knob label { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.knob select { border: 0; background: transparent; font-weight: 600; padding: 0; outline: none; }
+.knob select option { background: var(--panel); }
+.knob.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 10px; }
+.knob.wide label { flex: none; }
+
+/* Queue */
+.qnum { font: 600 12px/1 var(--f-mono); color: var(--muted); width: 22px; text-align: right; }
+.row.q { grid-template-columns: 22px 84px minmax(0,1fr) auto; }
+
+/* Local */
+.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 28px 16px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--panel); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drop svg.i { width: 34px; height: 34px; color: var(--accent); }
+
+/* IPTV */
+.iptv-tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.search { flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 38px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fchip { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-size: 13px; font-weight: 600; color: var(--muted); }
+.fchip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.channels { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; padding: 16px; }
+.ch { text-align: left; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-2); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.ch:hover { border-color: var(--accent); }
+.ch .thumb { width: 100%; border-radius: 0; font-size: 17px; }
+.ch .cm { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ch .cm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch .cm span { font: 11px/1.3 var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+textarea { width: 100%; min-height: 140px; resize: vertical; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font: 12.5px/1.5 var(--f-mono); }
+details.import { border-top: 1px solid var(--line); }
+details.import summary { padding: 12px 16px; cursor: pointer; font-weight: 600; }
+details.import .body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Settings */
+.set { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--line); }
+.set:first-of-type { border-top: 0; }
+.set b { display: block; }
+.set span { color: var(--muted); font-size: 13.5px; }
+.set select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
+.switch { position: relative; width: 44px; height: 26px; flex: none; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; pointer-events: none; }
+.switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + i { background: var(--accent); }
+.switch input:checked + i::after { transform: translateX(18px); }
+.switch input:focus-visible + i { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* YouTube player: one persistent iframe host laid over the TV screen (moving an iframe reloads it) */
+#ytHost { position: fixed; z-index: 5; left: -9999px; top: 0; width: 320px; height: 180px; visibility: hidden; border-radius: 6px; overflow: hidden; background: #000; }
+#ytHost iframe { width: 100%; height: 100%; border: 0; display: block; }
+.top, .nav { position: relative; z-index: 6; }
+.yt-tv { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+.yt-tv h2 { margin: 0; font: 700 15px/1.3 var(--f-body); }
+.yt-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.yt-opts > div { padding: 12px 14px; border-radius: 8px; background: var(--panel-2); display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--muted); min-width: 0; }
+.yt-opts b { color: var(--fg); font-size: 14px; }
+.yt-opts .btn { align-self: flex-start; }
+a.btn { text-decoration: none; }
+
+/* Today (Gemini quick access) */
+.gem-btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; font-weight: 600; font-size: 14px; }
+.gem-btn svg.i { color: var(--accent); }
+.gem-btn:hover { background: var(--panel-2); }
+.ask { display: flex; gap: 8px; padding: 10px; }
+.ask .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 46px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.ask .field:focus-within { border-color: var(--accent); }
+.ask input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font-size: 15px; }
+.ask .field svg.i { color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.tile { display: flex; flex-direction: column; gap: 4px; padding: 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); text-align: left; text-decoration: none; color: var(--fg); min-width: 0; }
+.tile:hover { border-color: var(--accent); }
+.tile[aria-busy="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.tile svg.i { width: 24px; height: 24px; color: var(--accent); margin-bottom: 4px; }
+.tile b { font-size: 15px; }
+.tile span { font-size: 12.5px; color: var(--muted); }
+.answer { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.answer .md { font-size: 15px; line-height: 1.6; max-width: 70ch; overflow-wrap: anywhere; }
+.answer .md h3 { margin: 10px 0 4px; font: 700 16px/1.3 var(--f-body); }
+.answer .md ul { margin: 4px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.answer .md p { margin: 4px 0; }
+.answer .md a, .sources a { color: var(--accent); }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; }
+.sources a { font: 12px/1.4 var(--f-mono); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loading { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.loading i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.mode { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+.mode .dot { display: inline-block; vertical-align: middle; margin-right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.mode .dot.on { background: var(--ok); }
+.where { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.where input { width: 180px; max-width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); }
+
+/* VLC */
+.chip.vlc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.vlc-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: 13.5px; }
+.vlc-steps b { color: var(--fg); font-weight: 600; }
+.vlc-steps code, .sheet code { font: 12px/1.5 var(--f-mono); padding: 1px 5px; border-radius: 4px; background: var(--panel-2); color: var(--fg); overflow-wrap: anywhere; }
+.bridge { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.bridge input { flex: 1; min-width: 200px; height: 38px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); font: 13px var(--f-mono); }
+.sheet .opt { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); }
+.sheet .opt b { color: var(--fg); font-size: 14.5px; }
+.sheet .opt .actions { flex-wrap: wrap; }
+
+/* Mirror */
+.mirror { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+.screen video.mv { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.mirror-idle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 6%; text-align: center; color: #c9d2df; background: radial-gradient(circle at 50% 40%, #1d2633, #05070a 70%); }
+.mirror-idle svg.i { width: 40px; height: 40px; color: #8d98aa; }
+.mirror-idle b { color: #fff; font: 700 17px/1.3 var(--f-body); }
+.mirror-idle span { font-size: 13px; max-width: 40ch; }
+.rec-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--bad); animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+.status { display: inline-flex; align-items: center; gap: 8px; font: 600 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; }
+.status.live { color: var(--bad); }
+.status.ready { color: var(--muted); }
+.notice.bad { border-left-color: var(--bad); }
+.guide { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.guide article { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.guide article.yours { border-color: var(--accent); }
+.guide h3 { margin: 0; display: flex; align-items: center; gap: 8px; font: 700 15px/1.3 var(--f-body); }
+.guide h3 .chip { margin-left: auto; color: var(--accent); border-color: var(--accent); }
+.guide ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13.5px; }
+.guide ol b { color: var(--fg); font-weight: 600; }
+.guide .works { font: 11.5px/1.45 var(--f-mono); color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+kbd { font: 600 11.5px/1 var(--f-mono); padding: 2px 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--panel-2); color: var(--fg); }
+
+/* Mini remote */
+.mini { grid-area: mini; z-index: 6; display: flex; align-items: center; gap: 14px; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-top: 1px solid var(--line); background: var(--panel); position: relative; }
+.mini .bar { position: absolute; left: 0; right: 0; top: -1px; height: 3px; background: var(--line); }
+.mini .bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.mini .thumb { width: 64px; cursor: pointer; }
+.mini .thumb .dur { display: none; }
+.mini .meta { flex: 1; cursor: pointer; }
+.mini .meta .s { margin-top: 1px; }
+.mini .ctl { display: flex; gap: 4px; align-items: center; }
+.mini .ctl .play { background: var(--accent); color: var(--accent-ink); }
+.mini .ctl .play:hover { background: var(--accent); filter: brightness(1.06); }
+
+/* Device sheet */
+.scrim { position: fixed; inset: 0; background: rgba(5,8,12,.55); display: grid; place-items: center; padding: 16px; z-index: 40; }
+.sheet { width: min(460px, 100%); max-height: calc(100% - 32px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.sheet header { display: flex; align-items: center; gap: 10px; padding: 16px 16px 8px; }
+.sheet header h2 { margin: 0; font: 800 20px/1.2 var(--f-display); flex: 1; }
+.scan { display: flex; align-items: center; gap: 10px; padding: 0 16px 12px; color: var(--muted); font-size: 13px; }
+.radar { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); position: relative; }
+.radar.on::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--accent); animation: ping 1.2s ease-out infinite; }
+@keyframes ping { from { transform: scale(.5); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+.dev { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 16px; border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
+.dev:hover { background: var(--panel-2); }
+.dev .ico { width: 40px; height: 40px; border-radius: 10px; background: var(--panel-2); display: grid; place-items: center; flex: none; }
+.dev.on .ico { background: var(--accent); color: var(--accent-ink); }
+.dev .dm { flex: 1; min-width: 0; }
+.dev .dm b { display: block; }
+.dev .dm span { font-size: 12.5px; color: var(--muted); }
+.dev .state { font: 600 11px/1 var(--f-mono); color: var(--accent); }
+.sheet footer { padding: 12px 16px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50; padding: 10px 16px; border-radius: 8px; background: var(--fg); color: var(--bg); font-weight: 600; font-size: 14px; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+
+@media (max-width: 860px) {
+  .np, .mirror { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 760px) {
+  .gem-btn span { display: none; }
+  .app { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr) auto auto; grid-template-areas: "top" "main" "mini" "nav"; }
+  .nav { flex-direction: row; border-right: 0; border-top: 1px solid var(--line); padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); overflow-x: auto; gap: 0; }
+  .nav button { flex-direction: column; gap: 3px; padding: 6px 10px; font-size: 11px; flex: 1 0 auto; }
+  .nav .badge, .nav .sep { display: none; }
+  .brand .name-long { display: none; }
+  .row { grid-template-columns: 64px minmax(0,1fr); }
+  .row .thumb { width: 64px; }
+  .row .actions { grid-column: 1 / -1; justify-content: flex-end; }
+  .row.q { grid-template-columns: 18px 64px minmax(0,1fr); }
+  .mini .ctl .hide-sm { display: none; }
+  .mini .thumb { display: none; }
+  .toast { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-width: 430px) { .cast-btn span { display: none; } .cast-btn { padding: 8px; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+<!-- HEAD-END -->
+</head>
+<body>
+<!-- BODY-START -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-cast" viewBox="0 0 24 24"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a8 8 0 0 1 8 8"/><path d="M2 16a4 4 0 0 1 4 4"/><path d="M2 20h.01"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4h4"/></symbol>
+    <symbol id="i-fwd" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 5l10 7-10 7z" fill="currentColor" stroke="none"/><path d="M19 5v14"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6h12M4 12h12M4 18h8M18 15v6M15 18h6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8M9 2l3 4 3-4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/></symbol>
+    <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M17 10.5a2 2 0 1 0 0 3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-chrome" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.5M9 13.8L4.8 6.3M15 13.8l-4.3 7.2"/></symbol>
+    <symbol id="i-roku" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="3"/><circle cx="17" cy="12" r="1.5"/></symbol>
+    <symbol id="i-fire" viewBox="0 0 24 24"><rect x="8" y="2.5" width="8" height="19" rx="3"/><circle cx="12" cy="8" r="2"/><path d="M10.5 13h3M10.5 16h3"/></symbol>
+    <symbol id="i-dlna" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M12 16v4M8 10h2l2-3 2 6 2-3h1"/></symbol>
+    <symbol id="i-air" viewBox="0 0 24 24"><path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="M12 15l5 6H7z"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-mirror" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M9 10.5l3-3 3 3M12 7.5v6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3c.6 4.6 3.4 7.4 9 9-5.6 1.6-8.4 4.4-9 9-.6-4.6-3.4-7.4-9-9 5.6-1.6 8.4-4.4 9-9z"/></symbol>
+    <symbol id="i-news" viewBox="0 0 24 24"><rect x="3" y="4" width="15" height="16" rx="2"/><path d="M18 8h3v10a2 2 0 0 1-2 2M7 8h7M7 12h7M7 16h4"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 1 1 .9-8.9A6 6 0 0 1 19 11a3.5 3.5 0 0 1-.5 7z"/><path d="M5 4.5l1 1M10 2.5v1.5"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+    <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7l4 3-1.5 5h-5L8 10z"/><path d="M12 3v4M21 11l-5-1M17.5 19l-3-4M6.5 19l3-4M3 11l5-1"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 16l4-5 4 3 6-8"/><path d="M15 6h4v4"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 16V11l2-5h10l2 5v5"/><path d="M3 16h18v3H3zM7 11h10"/><circle cx="7.5" cy="19" r="1"/><circle cx="16.5" cy="19" r="1"/></symbol>
+    <symbol id="i-speak" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></symbol>
+    <symbol id="i-vlc" viewBox="0 0 24 24"><path d="M10.2 3h3.6l5.2 15H5z"/><path d="M8 11.5h8M6.8 15h10.4"/><path d="M3 21h18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.8-4M4 4v4h4M4 13a8 8 0 0 0 14.8 4M20 20v-4h-4"/></symbol>
+  </defs>
+</svg>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><span class="mark"><svg class="i"><use href="#i-cast"/></svg></span><span>StreamBeam<span class="name-long muted" style="font-weight:600"> Caster</span></span></div>
+    <div class="spacer"></div>
+    <button class="gem-btn" data-act="openToday" title="Ask Gemini (G)" aria-label="Ask Gemini"><svg class="i"><use href="#i-spark"/></svg><span>Ask Gemini</span></button>
+    <button class="icon-btn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme"><svg class="i"><use href="#i-sun"/></svg></button>
+    <button class="cast-btn" id="castBtn" aria-haspopup="dialog"><svg class="i"><use href="#i-cast"/></svg><span id="castLabel">Not connected</span></button>
+  </header>
+
+  <nav class="nav" id="nav" aria-label="Sections">
+    <button data-view="today"><svg class="i"><use href="#i-spark"/></svg>Today</button>
+    <button data-view="browser"><svg class="i"><use href="#i-globe"/></svg>Browser</button>
+    <button data-view="player"><svg class="i"><use href="#i-cast"/></svg>Remote</button>
+    <button data-view="mirror"><svg class="i"><use href="#i-mirror"/></svg>Mirror</button>
+    <button data-view="queue"><svg class="i"><use href="#i-list"/></svg>Queue<span class="badge" id="qBadge">0</span></button>
+    <div class="sep"></div>
+    <button data-view="local"><svg class="i"><use href="#i-folder"/></svg>Local files</button>
+    <button data-view="iptv"><svg class="i"><use href="#i-tv"/></svg>IPTV</button>
+    <button data-view="bookmarks"><svg class="i"><use href="#i-star"/></svg>Bookmarks</button>
+    <button data-view="history"><svg class="i"><use href="#i-clock"/></svg>History</button>
+    <div class="sep"></div>
+    <button data-view="settings"><svg class="i"><use href="#i-gear"/></svg>Settings</button>
+  </nav>
+
+  <main class="main" id="main"></main>
+
+  <footer class="mini" id="mini" aria-label="Now casting"></footer>
+</div>
+
+<video id="video" playsinline crossorigin="anonymous" hidden></video>
+<style>body > video { display: none; }</style>
+<input type="file" id="subFile" accept=".srt,.vtt" hidden>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const icon = (id, cls = 'i') => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
+const uid = () => Math.random().toString(36).slice(2, 10);
+const fmt = s => {
+  if (!isFinite(s) || s < 0) s = 0;
+  s = Math.floor(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+};
+const hue = str => { let h = 0; for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 360; };
+const poster = title => { const h = hue(title); return `background: linear-gradient(135deg, hsl(${h} 62% 38%), hsl(${(h + 48) % 360} 70% 22%) 60%, hsl(${(h + 96) % 360} 55% 14%));`; };
+const initials = t => String(t).replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '▶';
+/* YouTube links: watch, youtu.be, shorts, live, embed, playlists, music and mobile hosts */
+const ytTime = t => { if (!t) return 0; if (/^\d+$/.test(t)) return +t; const m = String(t).match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; };
+function ytParse(u) {
+  let x; try { x = new URL(u); } catch { return null; }
+  const h = x.hostname.replace(/^(www|m|music)\./, '');
+  let id = null;
+  if (h === 'youtu.be') id = x.pathname.slice(1).split('/')[0];
+  else if (h === 'youtube.com' || h === 'youtube-nocookie.com') {
+    id = x.searchParams.get('v');
+    const m = x.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{11})/); if (m) id = m[1];
+  } else return null;
+  if (id && !/^[\w-]{11}$/.test(id)) id = null;
+  const list = x.searchParams.get('list');
+  if (!id && !list) return null;
+  return { id, list, start: ytTime(x.searchParams.get('t') || x.searchParams.get('start')) };
+}
+const ytUrl = y => y.id ? `https://www.youtube.com/watch?v=${y.id}${y.list ? '&list=' + y.list : ''}` : `https://www.youtube.com/playlist?list=${y.list}`;
+const ytItem = (url, title) => { const y = ytParse(url); return { id: uid(), title: title || (y.id ? 'YouTube video' : 'YouTube playlist'), url: ytUrl(y), start: y.start, res: y.id ? 'Auto quality' : 'Playlist', size: '—', duration: 0, source: 'YouTube' }; };
+const fmtOf = url => {
+  if (ytParse(url)) return 'YOUTUBE';
+  const u = String(url).toLowerCase().split('?')[0];
+  if (u.startsWith('blob:')) return 'FILE';
+  if (u.endsWith('.m3u8')) return 'HLS';
+  if (u.endsWith('.mpd')) return 'DASH';
+  if (u.endsWith('.webm')) return 'WEBM';
+  if (u.endsWith('.mkv')) return 'MKV';
+  if (u.endsWith('.mov')) return 'MOV';
+  if (u.endsWith('.avi')) return 'AVI';
+  if (u.endsWith('.flv')) return 'FLV';
+  if (u.endsWith('.wmv')) return 'WMV';
+  if (u.endsWith('.ts')) return 'TS';
+  if (/\.(mp3|m4a|aac|ogg|flac|wav)$/.test(u)) return 'AUDIO';
+  return 'MP4';
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('sb.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('sb.' + k, JSON.stringify(v)); } catch {} }
+};
+
+/* ---------- Sample content (public test media) ---------- */
+const G = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
+/* Formats browsers can't decode on their own; VLC plays them */
+const NEEDS_VLC = ['MKV', 'AVI', 'FLV', 'WMV', 'TS', 'DASH'];
+const SITES = [
+  { id: 'blender', name: 'Blender Open Movies', url: 'https://studio.blender.org/films/', blurb: 'Four open movies, MP4 up to 1080p.',
+    media: [
+      { title: 'Big Buck Bunny', url: G + 'BigBuckBunny.mp4', duration: 596, res: '1080p', size: '158 MB' },
+      { title: 'Sintel', url: G + 'Sintel.mp4', duration: 888, res: '720p', size: '181 MB' },
+      { title: 'Tears of Steel', url: G + 'TearsOfSteel.mp4', duration: 734, res: '720p', size: '177 MB' },
+      { title: 'Elephants Dream', url: G + 'ElephantsDream.mp4', duration: 653, res: '480p', size: '161 MB' }
+    ] },
+  { id: 'streams', name: 'Adaptive test streams', url: 'https://test-streams.mux.dev/', blurb: 'HLS and DASH manifests with several bitrates.',
+    media: [
+      { title: 'Bunny (HLS ladder)', url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', duration: 596, res: 'Auto · 5 levels', size: 'Adaptive' },
+      { title: 'Bip-Bop 16×9', url: 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8', duration: 1800, res: 'Auto · 4 levels', size: 'Adaptive' },
+      { title: 'Envivio DASH sample', url: 'https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd', duration: 193, res: 'Auto', size: 'Adaptive' },
+      { title: 'Jellyfish 4K HEVC (MKV)', url: 'https://repo.jellyfin.org/archive/jellyfish/media/jellyfish-10-mbps-hd-hevc.mkv', duration: 30, res: '1080p HEVC', size: '38 MB' }
+    ] },
+  { id: 'youtube', name: 'YouTube', url: 'https://www.youtube.com/@BlenderOfficial', blurb: 'Paste any YouTube link: videos, Shorts, live streams or playlists.',
+    media: [
+      ytItem('https://www.youtube.com/watch?v=aqz-KE-bpKQ', 'Big Buck Bunny 60fps 4K'),
+      ytItem('https://www.youtube.com/watch?v=eRsGyueVLvQ', 'Sintel'),
+      ytItem('https://www.youtube.com/watch?v=R6MlUcmOul8', 'Tears of Steel')
+    ].map((m, i) => ({ ...m, res: '4K · Auto quality', duration: [635, 888, 734][i] })) },
+  { id: 'shorts', name: 'Short clips', url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/', blurb: 'Quick 15-second clips for testing a TV.',
+    media: [
+      { title: 'For Bigger Blazes', url: G + 'ForBiggerBlazes.mp4', duration: 15, res: '720p', size: '2.4 MB' },
+      { title: 'For Bigger Escapes', url: G + 'ForBiggerEscapes.mp4', duration: 15, res: '720p', size: '2.2 MB' },
+      { title: 'For Bigger Fun', url: G + 'ForBiggerFun.mp4', duration: 60, res: '720p', size: '12 MB' },
+      { title: 'For Bigger Joyrides', url: G + 'ForBiggerJoyrides.mp4', duration: 15, res: '720p', size: '2.5 MB' }
+    ] }
+];
+const SAMPLE_M3U = `#EXTM3U
+#EXTINF:-1 tvg-id="bunny" group-title="Movies",Bunny Channel
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+#EXTINF:-1 tvg-id="sintel" group-title="Movies",Sintel 24/7
+${G}Sintel.mp4
+#EXTINF:-1 tvg-id="tos" group-title="Movies",Tears of Steel
+${G}TearsOfSteel.mp4
+#EXTINF:-1 tvg-id="ed" group-title="Animation",Elephants Dream
+${G}ElephantsDream.mp4
+#EXTINF:-1 tvg-id="fun" group-title="Animation",Bigger Fun
+${G}ForBiggerFun.mp4
+#EXTINF:-1 tvg-id="bipbop" group-title="Test signals",Bip-Bop Test Card
+https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8
+#EXTINF:-1 tvg-id="envivio" group-title="Test signals",DASH Test Signal
+https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd`;
+
+const DEVICES = [
+  { id: 'remote', name: 'Nearby screen', kind: 'Browser Remote Playback', icon: 'chrome', real: true },
+  { id: 'vlc', name: 'VLC media player', kind: 'VLC on a computer · via StreamBeam bridge', icon: 'vlc', real: true },
+  { id: 'cc-living', name: 'Living Room TV', kind: 'Chromecast · 192.168.1.24', icon: 'cast' },
+  { id: 'roku', name: 'Bedroom Roku', kind: 'Roku Ultra · 192.168.1.31', icon: 'roku' },
+  { id: 'fire', name: 'Office Fire TV', kind: 'Fire TV Stick 4K · 192.168.1.40', icon: 'fire' },
+  { id: 'dlna', name: 'Samsung Q80 (DLNA)', kind: 'UPnP/DLNA renderer · 192.168.1.52', icon: 'dlna' },
+  { id: 'airplay', name: 'Kitchen Apple TV', kind: 'AirPlay · 192.168.1.61', icon: 'air' }
+];
+
+/* ---------- State ---------- */
+const S = {
+  view: 'player',
+  url: SITES[0].url,
+  detected: SITES[0].media.map(m => ({ ...m, id: uid(), source: SITES[0].name })),
+  notice: null,
+  device: store.get('device', ''),
+  queue: store.get('queue', null),
+  history: store.get('history', null),
+  bookmarks: store.get('bookmarks', null),
+  m3u: store.get('m3u', SAMPLE_M3U),
+  group: 'All', chSearch: '',
+  local: [],
+  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
+  scanning: false
+};
+if (S.device && S.device !== 'local' && !S.settings.demo && !DEVICES.find(d => d.id === S.device)?.real) S.device = '';
+if (!S.queue) S.queue = [SITES[0].media[1], SITES[1].media[0]].map(m => ({ ...m, id: uid() }));
+if (!S.history) S.history = [
+  { ...SITES[0].media[3], id: uid(), at: Date.now() - 864e5 * 1.2, pos: 412 },
+  { ...SITES[2].media[2], id: uid(), at: Date.now() - 864e5 * 2.6, pos: 60 }
+];
+if (!S.bookmarks) S.bookmarks = SITES.slice(0, 2).map(s => ({ id: uid(), title: s.name, url: s.url }));
+const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'm3u'].forEach(k => store.set(k, S[k])); };
+
+/* ---------- Playback engine ---------- */
+const video = $('#video');
+let hls = null;
+const P = { item: null, playing: false, pos: 0, dur: 0, live: false, vol: .8, muted: false, rate: 1, real: false, subs: null, subName: '', yt: null, ytState: '' };
+
+/* YouTube runs in the official IFrame Player, driven by the same remote controls */
+const ytHost = document.createElement('div'); ytHost.id = 'ytHost'; ytHost.innerHTML = '<div id="ytInner"></div>';
+const Y = { api: null, player: null, ready: false, key: '' };
+const ytOn = () => P.yt && Y.ready && Y.key === P.item?.url;
+function ytApi() {
+  if (Y.api) return Y.api;
+  Y.api = new Promise((res, rej) => {
+    if (window.YT && YT.Player) return res();
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { prev && prev(); res(); };
+    const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api'; sc.onerror = () => rej(new Error('blocked'));
+    document.head.appendChild(sc);
+    setTimeout(() => rej(new Error('timeout')), 9000);
+  }).catch(e => { Y.api = null; throw e; });
+  return Y.api;
+}
+async function ytLoad(item, startAt) {
+  const y = ytParse(item.url);
+  P.ytState = 'loading'; Y.ready = false;
+  try { await ytApi(); } catch { if (P.item === item) { P.ytState = 'blocked'; render(); } return; }
+  if (P.item !== item) return;
+  const start = Math.floor(startAt || item.start || 0);
+  const vars = { playsinline: 1, rel: 0, controls: 0, disablekb: 1, iv_load_policy: 3, start, autoplay: P.playing ? 1 : 0 };
+  if (location.protocol.startsWith('http')) vars.origin = location.origin;
+  if (!Y.player) {
+    document.body.appendChild(ytHost);
+    if (!y.id) Object.assign(vars, { listType: 'playlist', list: y.list });
+    Y.player = new YT.Player('ytInner', { width: '100%', height: '100%', videoId: y.id || undefined, playerVars: vars,
+      events: {
+        onReady: () => { Y.ready = true; Y.key = P.item?.url; ytSync(); if (y.id && y.list) Y.player.cuePlaylist?.({ list: y.list }); },
+        onStateChange: ytState,
+        onError: e => { P.ytState = { 2: 'badid', 5: 'html5', 100: 'missing', 101: 'noembed', 150: 'noembed', 153: 'config' }[e.data] || 'error'; P.playing = false; render(); }
+      } });
+  } else {
+    Y.key = item.url; Y.ready = true;
+    if (y.id) (P.playing ? Y.player.loadVideoById : Y.player.cueVideoById).call(Y.player, { videoId: y.id, startSeconds: start });
+    else (P.playing ? Y.player.loadPlaylist : Y.player.cuePlaylist).call(Y.player, { list: y.list, listType: 'playlist', startSeconds: start });
+    ytSync();
+  }
+}
+function ytSync() {
+  if (!ytOn()) return;
+  const pl = Y.player;
+  pl.setVolume(Math.round(P.vol * 100)); P.muted ? pl.mute() : pl.unMute(); pl.setPlaybackRate(P.rate);
+  P.ytState = 'ok'; render();
+}
+function ytState(e) {
+  if (!P.yt) return;
+  const pl = Y.player;
+  if (e.data === YT.PlayerState.PLAYING) {
+    P.playing = true; P.ytState = 'ok';
+    const d = pl.getDuration(); P.live = !!pl.getVideoData?.().isLive || !d; if (d) P.dur = d;
+    const t = pl.getVideoData?.().title; if (t && P.item && /^YouTube (video|playlist)$/.test(P.item.title)) { P.item.title = t; render(); }
+  } else if (e.data === YT.PlayerState.PAUSED) P.playing = false;
+  else if (e.data === YT.PlayerState.ENDED) { onEnded(); return; }
+  tick(true);
+}
+function placeYT() {
+  const sc = $('#screen');
+  const show = P.yt && Y.player && sc && S.view === 'player' && P.ytState === 'ok';
+  if (!show) { ytHost.style.visibility = 'hidden'; ytHost.style.left = '-9999px'; return; }
+  const r = sc.getBoundingClientRect();
+  Object.assign(ytHost.style, { visibility: 'visible', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+}
+addEventListener('resize', placeYT);
+async function ytTitle(item) {
+  try {
+    const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(item.url));
+    const j = await r.json();
+    if (j.title) { item.title = j.title; item.channel = j.author_name; render(); }
+  } catch {}
+}
+
+function load(item, startAt = 0) {
+  P.item = item; P.pos = startAt; P.dur = item.duration || 0; P.live = !!item.live; P.real = false; P.subs = null; P.subName = '';
+  if (hls) { hls.destroy(); hls = null; }
+  video.removeAttribute('src'); video.load();
+  P.yt = ytParse(item.url); P.ytState = ''; P.vidErr = false;
+  P.ext = S.device === 'vlc' && canVlc(item.url) ? 'vlc' : '';
+  if (P.ext) { P.yt = null; if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} } Y.key = ''; if (!P.pos && item.start) P.pos = item.start; return; }
+  if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} }
+  Y.key = '';
+  if (P.yt) { if (!P.pos && item.start) P.pos = item.start; return; }
+  const f = fmtOf(item.url);
+  try {
+    if (f === 'HLS' && !video.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
+      hls = new Hls(); hls.loadSource(item.url); hls.attachMedia(video);
+    } else if (f !== 'DASH') {
+      video.src = item.url;
+    }
+  } catch {}
+  video.volume = P.vol; video.muted = P.muted; video.playbackRate = P.rate;
+}
+video.addEventListener('loadedmetadata', () => {
+  P.real = true;
+  if (isFinite(video.duration) && video.duration > 0) { P.dur = video.duration; P.live = false; } else P.live = true;
+  if (P.pos) video.currentTime = P.pos;
+  if (P.playing) video.play().catch(() => {});
+  renderScreen();
+});
+video.addEventListener('error', () => { P.real = false; if (P.item && video.getAttribute('src')) P.vidErr = true; if (S.view === 'player') render(); else renderScreen(); });
+
+/* ---------- VLC ----------
+   VLC acts as a receiver through its web interface (Lua HTTP). Browsers can't send VLC's password,
+   so server.mjs serves this app and relays /vlc/status to VLC's /requests/status.json. */
+const V = { ok: false, err: '', version: '', state: '', busy: false };
+const vlcBase = () => (S.settings.vlcBridge || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8090')).replace(/\/+$/, '');
+const vlcOn = () => P.ext === 'vlc';
+const canVlc = url => !String(url).startsWith('blob:');
+async function vlc(command, params = {}) {
+  const q = new URLSearchParams(command ? { command, ...params } : params);
+  const r = await fetch(vlcBase() + '/vlc/status?' + q, { cache: 'no-store' });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(r.status === 401 ? 'VLC rejected the password. Check VLC_PASSWORD matches the password set in VLC.' : (j.error || 'The bridge answered ' + r.status + '.'));
+  return j;
+}
+async function vlcConnect(quiet) {
+  V.busy = true; if (!quiet) render();
+  try {
+    const j = await vlc('');
+    V.ok = true; V.err = ''; V.version = j.version || ''; if (!quiet) toast('Connected to VLC' + (V.version ? ' ' + V.version : ''));
+  } catch (e) {
+    V.ok = false;
+    V.err = e instanceof TypeError ? `Can’t reach the bridge at ${vlcBase()}. Start it with the command below, then try again.` : e.message;
+    if (!quiet) toast('VLC isn’t connected yet');
+  }
+  V.busy = false; render(); return V.ok;
+}
+const vlcFail = e => { V.ok = false; V.err = e instanceof TypeError ? `Lost the connection to the bridge at ${vlcBase()}.` : e.message; toast('VLC didn’t respond'); render(); };
+async function vlcPlay(item, start) {
+  if (!V.ok && !(await vlcConnect(true))) { P.playing = false; S.view = 'player'; render(); return; }
+  try {
+    await vlc('in_play', { input: item.url, ...(start > 1 ? { option: 'start-time=' + Math.floor(start) } : {}) });
+    await vlc('volume', { val: Math.round((P.muted ? 0 : P.vol) * 256) });
+    if (P.rate !== 1) await vlc('rate', { val: P.rate });
+  } catch (e) { vlcFail(e); }
+}
+setInterval(async () => {
+  if (!vlcOn() || !P.item || !V.ok || document.hidden) return;
+  try {
+    const j = await vlc('');
+    const was = V.state; V.state = j.state;
+    if (j.length > 0) { P.dur = j.length; P.live = false; }
+    P.pos = j.length > 0 && j.position ? j.position * j.length : (j.time || 0);
+    const playing = j.state === 'playing';
+    const t = j.information?.category?.meta?.title;
+    if (t && /^(YouTube (video|playlist)|Video)$/.test(P.item.title)) { P.item.title = t; render(); }
+    if (was === 'playing' && j.state === 'stopped' && P.dur && P.pos >= P.dur - 3) { onEnded(); return; }
+    if (playing !== P.playing) { P.playing = playing; tick(true); } else tick();
+  } catch (e) { if (V.ok) vlcFail(e); }
+}, 1000);
+const send = (cmd, params) => vlcOn() && vlc(cmd, params).catch(vlcFail);
+
+/* Open in the VLC app (phones) or desktop VLC (.m3u playlist / Open Network Stream) */
+const isAndroid = /Android/i.test(navigator.userAgent), isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+function vlcAppLink(url, title) {
+  if (isAndroid) { const u = new URL(url); return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.slice(0, -1)};package=org.videolan.vlc;type=video/*;S.title=${encodeURIComponent(title)};end`; }
+  if (isIOS) return 'vlc-x-callback://x-callback-url/stream?url=' + encodeURIComponent(url);
+  return '';
+}
+function m3uFor(items) {
+  return '#EXTM3U\n' + items.map(m => `#EXTINF:${Math.round(m.duration || -1)},${String(m.title).replace(/[\r\n]/g, ' ')}\n${m.start || m.pos > 5 ? '#EXTVLCOPT:start-time=' + Math.floor(m.pos > 5 ? m.pos : m.start) + '\n' : ''}${m.url}`).join('\n') + '\n';
+}
+function saveM3u(items, name) {
+  try {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([m3uFor(items)], { type: 'audio/x-mpegurl' }));
+    a.download = name.replace(/[^\w .-]+/g, '').trim().slice(0, 60) + '.m3u';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('Open the downloaded .m3u with VLC. No download? Use Copy link.');
+  } catch { toast('Saving isn’t allowed here. Copy the link instead.'); }
+}
+let vlcSheetItem = null;
+function openVlcSheet(item) {
+  vlcSheetItem = item;
+  const app = vlcAppLink(item.url, item.title);
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="vlcTitle">
+    <header><h2 id="vlcTitle">Open in VLC</h2><button class="icon-btn" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
+    <div class="scan" style="display:block"><b style="color:var(--fg)">${esc(item.title)}</b><br><code>${esc(item.url)}</code></div>
+    ${app ? `<div class="opt"><b>VLC app on this ${isIOS ? 'iPhone or iPad' : 'phone'}</b>Plays it in VLC, which handles almost every format. Install VLC first if you don’t have it.
+      <span class="actions"><a class="btn primary sm" href="${esc(app)}">${icon('vlc')}Open in VLC</a></span></div>` : ''}
+    <div class="opt"><b>VLC on this computer</b>Save a playlist and open it with VLC, or in VLC choose Media → Open Network Stream (<kbd>Ctrl</kbd> + <kbd>N</kbd>, <kbd>⌘</kbd> + <kbd>N</kbd> on Mac) and paste the link.
+      <span class="actions"><button class="btn sm" data-act="vlcM3u">${icon('upload')}Save .m3u playlist</button><button class="btn sm" data-act="vlcCopy">${icon('copy')}Copy link</button></span></div>
+    <div class="opt"><b>Cast to VLC</b>Send it to VLC on a computer connected to your TV and use this app as the remote.
+      <span class="actions"><button class="btn sm" data-act="vlcSend">${icon('cast')}Cast to VLC</button></span></div>
+  </div>`;
+  scrim.hidden = false;
+  scrim.querySelector('.sheet button, .sheet a')?.focus();
+}
+video.addEventListener('ended', () => onEnded());
+
+function playItem(item, opts = {}) {
+  if (M.stream) stopMirror();
+  const it = { ...item, id: item.id || uid() };
+  const resume = S.settings.resume ? (S.history.find(h => h.url === it.url)?.pos || 0) : 0;
+  load(it, opts.from ?? (resume > 5 && resume < (it.duration || Infinity) - 10 ? resume : 0));
+  P.playing = true;
+  if (P.real) video.play().catch(() => {});
+  if (P.yt) ytLoad(it, P.pos);
+  if (vlcOn()) vlcPlay(it, P.pos);
+  else if (S.device === 'vlc') toast('VLC can’t open files from the browser. Playing here instead.');
+  logHistory();
+  if (!S.device) { openDevices(); toast('Choose a screen to cast to'); }
+  else if (S.device === 'local') toast(`Playing “${it.title}”`);
+  else if (S.device !== 'vlc' || vlcOn()) toast(`Casting “${it.title}” to ${devName()}`);
+  if (S.device === 'remote' && !P.yt) promptRemote();
+  S.view = 'player';
+  render();
+}
+function toggle() {
+  if (!P.item) return;
+  P.playing = !P.playing;
+  if (P.real) P.playing ? video.play().catch(() => {}) : video.pause();
+  if (ytOn()) P.playing ? Y.player.playVideo() : Y.player.pauseVideo();
+  send(P.playing ? 'pl_forceresume' : 'pl_forcepause');
+  tick(true);
+}
+function seek(t) {
+  if (!P.item || P.live) return;
+  P.pos = Math.max(0, Math.min(P.dur || 0, t));
+  if (P.real) video.currentTime = P.pos;
+  if (ytOn()) Y.player.seekTo(P.pos, true);
+  send('seek', { val: Math.floor(P.pos) });
+  tick(true);
+}
+function stop() {
+  logHistory();
+  P.item = null; P.playing = false; P.pos = 0;
+  if (hls) { hls.destroy(); hls = null; }
+  video.pause(); video.removeAttribute('src'); video.load();
+  if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} }
+  P.yt = null; Y.key = '';
+  send('pl_stop'); P.ext = '';
+  render();
+}
+function next() {
+  const n = S.queue.shift();
+  if (n) { save(); playItem(n, { from: 0 }); } else { toast('Queue is empty'); }
+}
+function onEnded() {
+  logHistory(0);
+  if (S.settings.autoplay && S.queue.length) next();
+  else { P.playing = false; P.pos = P.dur; render(); }
+}
+function logHistory(posOverride) {
+  if (!P.item) return;
+  const pos = posOverride ?? P.pos;
+  S.history = [{ ...P.item, at: Date.now(), pos }, ...S.history.filter(h => h.url !== P.item.url)].slice(0, 60);
+  save();
+}
+let lastHist = 0;
+setInterval(() => {
+  if (!P.item || !P.playing) return;
+  if (P.real) { P.pos = video.currentTime; }
+  else if (ytOn()) { P.pos = Y.player.getCurrentTime() || 0; const d = Y.player.getDuration(); if (d && !P.live) P.dur = d; }
+  else if (P.yt && P.ytState !== 'blocked') { /* waiting on YouTube */ }
+  else if (vlcOn()) { if (V.ok) P.pos = Math.min(P.dur || Infinity, P.pos + .25 * P.rate); }
+  else {
+    P.pos += .25 * P.rate;
+    if (!P.live && P.dur && P.pos >= P.dur) { P.pos = P.dur; onEnded(); return; }
+  }
+  if (Date.now() - lastHist > 5000) { lastHist = Date.now(); logHistory(); }
+  tick();
+}, 250);
+
+/* Subtitles (SRT/VTT parsed into cues; rendered on the TV screen) */
+function parseSubs(text) {
+  const toS = t => { const m = t.trim().replace(',', '.').match(/(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)/); return m ? (+m[1] || 0) * 3600 + +m[2] * 60 + +m[3] : 0; };
+  return text.replace(/\r/g, '').split(/\n\n+/).map(b => {
+    const lines = b.split('\n'); const i = lines.findIndex(l => l.includes('-->'));
+    if (i < 0) return null;
+    const [a, z] = lines[i].split('-->');
+    return { a: toS(a), z: toS(z.split(' ').filter(Boolean)[0] || z), text: lines.slice(i + 1).join('\n').replace(/<[^>]+>/g, '') };
+  }).filter(Boolean);
+}
+$('#subFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  P.subs = parseSubs(await f.text()); P.subName = f.name; e.target.value = '';
+  toast(`Loaded ${P.subs.length} subtitle lines`); render();
+});
+
+/* Browser Remote Playback API: real casting to Chromecast / AirPlay where the browser supports it */
+function promptRemote() {
+  if (!video.remote || !video.src) { toast('This browser can’t reach nearby screens. Pick another device.'); return; }
+  video.remote.prompt().catch(err => toast(err.name === 'NotSupportedError' ? 'This video can’t be sent to a nearby screen' : 'No screen selected'));
+}
+
+/* ---------- Screen mirroring ----------
+   Captures a screen, window or tab with getDisplayMedia and shows it on the receiver.
+   Real TVs are reached through the OS / browser mirroring described in GUIDES. */
+const mvid = document.createElement('video');
+mvid.muted = true; mvid.autoplay = true; mvid.playsInline = true; mvid.className = 'mv';
+document.body.appendChild(mvid);
+const M = Object.assign({ surface: 'monitor', quality: '1080', fps: 30, audio: true }, store.get('mirror', {}), { stream: null, at: 0, error: null });
+const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+const saveMirror = () => store.set('mirror', { surface: M.surface, quality: M.quality, fps: M.fps, audio: M.audio });
+
+async function startMirror() {
+  M.error = null;
+  if (!canCapture) {
+    M.error = 'This browser can’t capture the screen. Phones and tablets don’t allow it from a web page, so use the built-in mirroring steps below.';
+    return render();
+  }
+  const h = +M.quality;
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: M.surface, height: { ideal: h }, width: { ideal: Math.round(h * 16 / 9) }, frameRate: { ideal: M.fps, max: M.fps } },
+      audio: M.audio, selfBrowserSurface: 'exclude', surfaceSwitching: 'include', systemAudio: 'include'
+    });
+    if (P.item) { logHistory(); P.playing = false; if (P.real) video.pause(); }
+    M.stream = stream; M.at = Date.now();
+    stream.getVideoTracks()[0].addEventListener('ended', () => stopMirror());
+    mvid.srcObject = stream; mvid.play().catch(() => {});
+    if (!S.device) openDevices();
+    toast(`Mirroring to ${devName()}`);
+  } catch (err) {
+    M.error = err.name === 'NotAllowedError'
+      ? 'Screen sharing didn’t start. Either the picker was cancelled, or this page is shown inside a frame that blocks screen capture (such as an embedded preview). Open the app directly in Chrome, Edge or Firefox, or use the built-in mirroring steps below.'
+      : err.name === 'NotFoundError' ? 'No screen, window or tab was available to share.'
+      : 'Screen sharing failed (' + err.name + '). Try a lower quality or frame rate.';
+  }
+  render();
+}
+function stopMirror() {
+  if (!M.stream) return;
+  M.stream.getTracks().forEach(t => t.stop());
+  M.stream = null; mvid.srcObject = null;
+  toast('Mirroring stopped'); render();
+}
+setInterval(() => {
+  if (!M.stream) return;
+  const el = fmt((Date.now() - M.at) / 1000);
+  const tr = M.stream.getVideoTracks()[0], st = tr ? tr.getSettings() : {};
+  const info = st.width ? `${st.width}×${st.height} · ${Math.round(st.frameRate || M.fps)} fps${M.stream.getAudioTracks().length ? ' · audio' : ''}` : 'Starting…';
+  [['#mTime', el], ['#mTime2', el], ['#mMini', el], ['#mStats', info]].forEach(([s, v]) => { const n = $(s); if (n) n.textContent = v; });
+}, 500);
+
+const UA = navigator.userAgent;
+const PLATFORM = /Android/i.test(UA) ? 'android' : (/iPhone|iPad|iPod/i.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1)) ? 'ios' : /Mac/i.test(UA) ? 'mac' : /Windows/i.test(UA) ? 'windows' : 'other';
+const BROWSER = /Edg\//.test(UA) ? 'edge' : /Chrome\//.test(UA) ? 'chrome' : 'other';
+const GUIDES = [
+  { id: 'chrome', title: 'Chrome on a computer', icon: 'chrome', you: BROWSER === 'chrome' && PLATFORM !== 'android',
+    steps: ['Open the <b>⋮</b> menu → <b>Cast, save, and share</b> → <b>Cast…</b>', 'Open <b>Sources</b> and pick <b>Cast screen</b> (or <b>Cast tab</b>)', 'Choose your TV'],
+    works: 'Chromecast, Google TV, Android TV, Nest Hub' },
+  { id: 'edge', title: 'Microsoft Edge', icon: 'globe', you: BROWSER === 'edge',
+    steps: ['Open the <b>⋯</b> menu → <b>More tools</b> → <b>Cast media to device</b>', 'Open <b>Sources</b> and pick <b>Cast desktop</b> or the tab', 'Choose your TV'],
+    works: 'Chromecast, Google TV, Android TV' },
+  { id: 'windows', title: 'Windows', icon: 'dlna', you: PLATFORM === 'windows',
+    steps: ['Press <kbd>Win</kbd> + <kbd>K</kbd>', 'Pick your TV from the list of wireless displays', 'Choose <b>Duplicate</b> or <b>Extend</b> with <kbd>Win</kbd> + <kbd>P</kbd>'],
+    works: 'Miracast: Fire TV, Roku, most Samsung and LG TVs, wireless display adapters' },
+  { id: 'mac', title: 'Mac', icon: 'air', you: PLATFORM === 'mac',
+    steps: ['Open <b>Control Center</b> in the menu bar', 'Click <b>Screen Mirroring</b>', 'Choose your Apple TV or AirPlay TV'],
+    works: 'AirPlay: Apple TV, many Samsung, LG, Sony, Vizio and Roku TVs' },
+  { id: 'ios', title: 'iPhone and iPad', icon: 'phone', you: PLATFORM === 'ios',
+    steps: ['Open <b>Control Center</b>', 'Tap <b>Screen Mirroring</b>', 'Choose your Apple TV or AirPlay TV'],
+    works: 'AirPlay: Apple TV, many Samsung, LG, Sony, Vizio and Roku TVs' },
+  { id: 'android', title: 'Android phone or tablet', icon: 'phone', you: PLATFORM === 'android',
+    steps: ['Swipe down twice to open <b>Quick Settings</b>', 'Tap <b>Screen Cast</b>, <b>Cast</b> or <b>Smart View</b> (Samsung)', 'Choose your TV. Or use the Google Home app → your device → <b>Cast my screen</b>'],
+    works: 'Chromecast, Google TV, Samsung and other Miracast TVs' },
+  { id: 'roku', title: 'Get a Roku ready', icon: 'roku', you: false,
+    steps: ['On the Roku: <b>Settings</b> → <b>System</b> → <b>Screen mirroring</b>', 'Set mode to <b>Prompt</b> or <b>Always allow</b>', 'Mirror from Windows (<kbd>Win</kbd> + <kbd>K</kbd>), Android, or AirPlay'],
+    works: 'Roku players and Roku TVs' },
+  { id: 'fire', title: 'Get a Fire TV ready', icon: 'fire', you: false,
+    steps: ['Press and hold <b>Home</b> on the remote', 'Select <b>Mirroring</b>', 'Mirror from Windows (<kbd>Win</kbd> + <kbd>K</kbd>) or Android'],
+    works: 'Fire TV Stick, Fire TV Cube, Fire TV Edition TVs' }
+].sort((a, b) => b.you - a.you);
+
+/* ---------- Today: Gemini quick access ----------
+   Answers come from the Gemini API with Google Search grounding, through the server's key (/gemini)
+   or the viewer's own key. Without either, a tile copies its prompt and opens Gemini. */
+const GM = { server: false, model: '', busy: '', answer: null, err: '', loc: '' };
+const LOCALE = navigator.language || 'en-US';
+const REGION = (LOCALE.split('-')[1] || 'US').toUpperCase();
+const countryName = code => { try { return new Intl.DisplayNames([LOCALE], { type: 'region' }).of(code) || code; } catch { return code; } };
+const todayStr = () => new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const useF = () => (S.settings.units || (['US', 'LR', 'MM'].includes(REGION) ? 'F' : 'C')) === 'F';
+const place = () => S.settings.city || GM.loc || '';
+const country = () => countryName(S.settings.region || REGION);
+const TILES = [
+  { id: 'news', label: 'Top news', sub: 'World and national headlines', icon: 'news',
+    prompt: () => `Today is ${todayStr()}. Give me today's most important news for someone in ${country()}: 6 bullet points, one sentence each, most important first, covering world, national and business news.` },
+  { id: 'weather', label: 'Weather', sub: 'Today and the next 3 days', icon: 'cloud', needsPlace: true,
+    prompt: () => `Today is ${todayStr()}. What's the weather today in ${place()}? Give current conditions, today's high and low in °${useF() ? 'F' : 'C'}, chance of rain and wind, one line on what to wear, then a 3-day outlook as 3 short bullets.` },
+  { id: 'local', label: 'Local news', sub: 'What’s happening near you', icon: 'pin', needsPlace: true,
+    prompt: () => `Today is ${todayStr()}. What's in the local news today in and around ${place()}? 5 bullet points, one sentence each.` },
+  { id: 'sports', label: 'Sports', sub: 'Results and today’s games', icon: 'ball',
+    prompt: () => `Today is ${todayStr()}. Give me the main sports results from the last 24 hours and today's big games for fans in ${country()}: 6 bullets with scores and kickoff times.` },
+  { id: 'markets', label: 'Markets', sub: 'Stocks, currency, crypto', icon: 'chart',
+    prompt: () => `Today is ${todayStr()}. Give a markets snapshot for someone in ${country()}: the main local stock index, S&P 500, the local currency against the US dollar or euro, oil, gold and bitcoin, one line each with the latest level and % change, then one sentence on what moved markets.` },
+  { id: 'tech', label: 'Tech', sub: 'Top technology stories', icon: 'chip',
+    prompt: () => `Today is ${todayStr()}. What are the 5 most important technology stories today? One sentence each.` },
+  { id: 'tv', label: 'Watch tonight', sub: 'TV and streaming picks', icon: 'tv',
+    prompt: () => `Today is ${todayStr()}. Suggest 5 things worth watching tonight on TV or streaming in ${country()}: title, where to watch, and one line on why.` },
+  { id: 'commute', label: 'Commute', sub: 'Traffic and transit today', icon: 'car', needsPlace: true,
+    prompt: () => `Today is ${todayStr()}. Are there traffic problems, road closures, public transport strikes or disruptions today in ${place()}? Short bullet summary; say clearly if nothing major is reported.` }
+];
+const SYSTEM = 'You are a daily briefing assistant inside a TV casting app. Be concise and factual, use Google Search for anything current, and give dates and numbers. Use "- " bullets and **bold** sparingly. No preamble and no closing offer.';
+
+async function geminiStatus() {
+  if (!location.protocol.startsWith('http')) return;
+  try { const r = await fetch('gemini/status', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); GM.server = !!j.enabled; GM.model = j.model || ''; } } catch {}
+  if (S.view === 'today') render();
+}
+const geminiReady = () => GM.server || !!S.settings.geminiKey;
+function parseGemini(j) {
+  const c = j.candidates?.[0];
+  const text = (c?.content?.parts || []).map(p => p.text || '').join('').trim();
+  const sources = (c?.groundingMetadata?.groundingChunks || []).map(x => x.web).filter(w => w && w.uri).map(w => ({ title: w.title || new URL(w.uri).hostname, uri: w.uri }));
+  if (!text) throw new Error(c?.finishReason === 'SAFETY' ? 'Gemini declined to answer that.' : 'Gemini returned no answer. Try again.');
+  return { text, sources };
+}
+async function gemini(prompt) {
+  if (GM.server) {
+    const r = await fetch('gemini', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'The server couldn’t reach Gemini (' + r.status + ').');
+    return j;
+  }
+  const model = (S.settings.geminiModel || 'gemini-2.5-flash').trim();
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': S.settings.geminiKey.trim() },
+    body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }] })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const m = j.error?.message || '';
+    throw new Error(r.status === 400 && /API key/i.test(m) ? 'Gemini rejected the API key. Check it in Settings.' : r.status === 429 ? 'Gemini’s quota for this key is used up. Try again later.' : r.status === 404 ? `Gemini doesn’t know the model “${model}”. Change it in Settings.` : m || 'Gemini answered ' + r.status + '.');
+  }
+  return parseGemini(j);
+}
+async function ask(tile, custom) {
+  const t = tile && TILES.find(x => x.id === tile);
+  if (t?.needsPlace && !place()) { GM.err = 'Set your city first, or tap “Use my location”.'; GM.answer = null; S.view = 'today'; render(); $('#tCity')?.focus(); return; }
+  const prompt = t ? t.prompt() : `Today is ${todayStr()}${place() ? ' and I am in ' + place() : ''}. ${custom}`;
+  const label = t ? t.label : custom;
+  S.view = 'today'; GM.err = '';
+  if (!geminiReady()) { GM.answer = null; render(); return; }
+  GM.busy = t ? t.id : 'custom'; GM.answer = { label, prompt, text: '', sources: [] }; render();
+  try { Object.assign(GM.answer, await gemini(prompt), { at: Date.now() }); }
+  catch (e) { GM.err = e instanceof TypeError ? 'Couldn’t reach Gemini. Check your connection.' : e.message; GM.answer = null; }
+  GM.busy = ''; render();
+}
+function locate() {
+  if (!navigator.geolocation) { toast('Location isn’t available here. Type your city instead.'); return; }
+  navigator.geolocation.getCurrentPosition(p => {
+    GM.loc = `the area at latitude ${p.coords.latitude.toFixed(2)}, longitude ${p.coords.longitude.toFixed(2)}`;
+    toast('Using your location'); render();
+  }, () => toast('Location was blocked. Type your city instead.'), { maximumAge: 6e5, timeout: 8000 });
+}
+function md(text) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, a, u) => `<a href="${u}" target="_blank" rel="noopener">${a}</a>`);
+  let html = '', list = false;
+  text.split('\n').forEach(l => {
+    const li = l.match(/^\s*[-*•]\s+(.*)/), h = l.match(/^#{1,4}\s+(.*)/);
+    if (li) { if (!list) { html += '<ul>'; list = true; } html += `<li>${inline(li[1])}</li>`; return; }
+    if (list) { html += '</ul>'; list = false; }
+    if (h) html += `<h3>${inline(h[1])}</h3>`;
+    else if (l.trim()) html += `<p>${inline(l)}</p>`;
+  });
+  return html + (list ? '</ul>' : '');
+}
+function speak() {
+  if (!('speechSynthesis' in window) || !GM.answer) return toast('Reading aloud isn’t available in this browser.');
+  if (speechSynthesis.speaking) { speechSynthesis.cancel(); return; }
+  const u = new SpeechSynthesisUtterance(GM.answer.text.replace(/\*\*|#+ |^\s*[-*•]\s+/gm, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'));
+  u.lang = LOCALE; speechSynthesis.speak(u);
+}
+
+/* ---------- Sniffer ---------- */
+const MEDIA_RE = /(?:https?:)?\/\/[^\s"'<>()]+?\.(?:mp4|m4v|webm|mov|mkv|avi|flv|wmv|ts|m3u8|mpd|mp3|m4a)(?:\?[^\s"'<>()]*)?/gi;
+async function browse(raw) {
+  let url = raw.trim(); if (!url) return;
+  if (!/^[a-z]+:/i.test(url)) url = (/\s/.test(url) || !/\./.test(url)) ? 'https://duckduckgo.com/?q=' + encodeURIComponent(url) : 'https://' + url;
+  S.url = url; S.notice = null;
+  const site = SITES.find(s => s.url === url);
+  if (site) { S.detected = site.media.map(m => ({ ...m, id: uid(), source: site.name })); S.notice = { ok: true, text: site.id === 'youtube' ? 'Paste a YouTube link above, or cast one of these.' : `Found ${site.media.length} videos on this page.` }; return render(); }
+  if (ytParse(url)) {
+    const it = ytItem(url); S.detected = [it];
+    S.notice = { ok: true, text: ytParse(url).id ? 'YouTube video. Ready to cast.' : 'YouTube playlist. Ready to cast.' };
+    render(); ytTitle(it); return;
+  }
+  if (/(^|\.)(youtube\.com|youtu\.be)$/i.test(new URL(url).hostname)) {
+    S.detected = []; S.notice = { text: 'Open a video on YouTube, tap Share → Copy link, and paste the link here.', link: url }; return render();
+  }
+  if (fmtOf(url) !== 'MP4' || /\.(mp4|m4v)(\?|$)/i.test(url)) {
+    if (/\.(mp4|m4v|webm|mov|mkv|avi|flv|wmv|ts|m3u8|mpd|mp3|m4a)(\?|$)/i.test(url)) {
+      const name = decodeURIComponent(url.split('?')[0].split('/').pop()).replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+      S.detected = [{ id: uid(), title: name || 'Video', url, res: fmtOf(url) === 'HLS' ? 'Auto' : '—', size: '—', duration: 0, source: 'Direct link' }];
+      S.notice = { ok: true, text: 'Direct video link. Ready to cast.' };
+      return render();
+    }
+  }
+  S.notice = { ok: true, text: 'Scanning page for videos…' }; render();
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    const html = await res.text();
+    const found = new Map();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    doc.querySelectorAll('video[src], source[src], a[href]').forEach(el => {
+      const v = el.getAttribute('src') || el.getAttribute('href');
+      if (el.tagName !== 'A' || /\.(mp4|m4v|webm|mov|mkv|m3u8|mpd)(\?|$)/i.test(v)) { try { found.set(new URL(v, url).href, el.closest('video')?.getAttribute('title') || ''); } catch {} }
+    });
+    (html.match(/(?:youtube(?:-nocookie)?\.com\/(?:embed\/|watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}/g) || []).forEach(m => { const it = ytItem('https://' + m.replace(/^/, m.startsWith('youtu.be') ? '' : 'www.')); if (!found.has(it.url)) found.set(it.url, ''); });
+    (html.match(MEDIA_RE) || []).forEach(m => { try { const h = new URL(m.startsWith('//') ? 'https:' + m : m).href; if (!found.has(h)) found.set(h, ''); } catch {} });
+    S.detected = [...found].map(([u, t]) => ytParse(u) ? ytItem(u, t) : ({ id: uid(), url: u, title: t || decodeURIComponent(u.split('?')[0].split('/').pop()), res: '—', size: '—', duration: 0, source: new URL(url).hostname }));
+    S.detected.filter(m => ytParse(m.url)).forEach(ytTitle);
+    S.notice = S.detected.length ? { ok: true, text: `Found ${S.detected.length} video${S.detected.length > 1 ? 's' : ''} on this page.` } : { text: 'No videos found on this page. Start the video on the site first, or paste its direct link (.mp4, .m3u8, .mpd).' };
+  } catch {
+    S.detected = [];
+    S.notice = { text: 'This site doesn’t allow scanning from a web app. Open it, copy the video’s direct link (.mp4 or .m3u8) and paste it here.', link: url };
+  }
+  render();
+}
+
+/* ---------- M3U ---------- */
+function parseM3U(text) {
+  const out = []; let cur = null;
+  text.replace(/\r/g, '').split('\n').forEach(l => {
+    l = l.trim(); if (!l) return;
+    if (l.startsWith('#EXTINF')) {
+      const attr = k => (l.match(new RegExp(k + '="([^"]*)"')) || [])[1] || '';
+      cur = { title: l.slice(l.lastIndexOf(',') + 1).trim() || 'Channel', group: attr('group-title') || 'Other', logo: attr('tvg-logo') };
+    } else if (!l.startsWith('#')) {
+      if (ytParse(l)) l = ytUrl(ytParse(l));
+      out.push({ id: uid(), ...(cur || { title: l.split('/').pop(), group: 'Other' }), url: l, live: fmtOf(l) === 'HLS' || fmtOf(l) === 'DASH', res: 'Live', size: '—', duration: 0 });
+      cur = null;
+    }
+  });
+  return out;
+}
+
+/* ---------- Rendering ---------- */
+const main = $('#main');
+main.addEventListener('scroll', () => placeYT(), { passive: true });
+function devName() { return DEVICES.find(d => d.id === S.device)?.name || 'this device'; }
+function thumb(m, w) {
+  const y = ytParse(m.url);
+  const img = y && y.id ? `background-image: url(https://i.ytimg.com/vi/${y.id}/mqdefault.jpg), ${poster(m.title).slice(12, -1)}; background-size: cover; background-position: center;` : poster(m.title);
+  const d = m.live ? '<span class="dur">LIVE</span>' : m.duration ? `<span class="dur">${fmt(m.duration)}</span>` : '';
+  return `<div class="thumb" style="${img}${w ? 'width:' + w : ''}">${y && y.id ? '' : esc(initials(m.title))}${d}</div>`;
+}
+function mediaRow(m, actions, extra = '') {
+  const f = fmtOf(m.url);
+  const playing = P.item && P.item.url === m.url;
+  return `<div class="row ${playing ? 'playing' : ''}" data-id="${m.id}">${extra}${thumb(m)}
+    <div class="meta"><div class="t">${esc(m.title)}</div>
+      <div class="s"><span class="chip fmt-${f}">${f}</span>${m.live ? '<span class="chip live">LIVE</span>' : ''}${NEEDS_VLC.includes(f) ? '<span class="chip vlc">VLC</span>' : ''}${m.res && m.res !== '—' ? `<span>${esc(m.res)}</span>` : ''}${m.size && m.size !== '—' ? `<span>· ${esc(m.size)}</span>` : ''}${playing ? '<span style="color:var(--accent);font-weight:700">· Now casting</span>' : ''}</div>
+      <div class="u">${esc(m.url.startsWith('blob:') ? (m.fileName || 'Local file') : m.url)}</div></div>
+    <div class="actions">${actions}</div></div>`;
+}
+const A = {
+  cast: '<button class="btn primary sm" data-act="cast">' + icon('cast') + 'Cast</button>',
+  queue: '<button class="btn sm" data-act="enqueue" title="Add to queue" aria-label="Add to queue">' + icon('plus') + 'Queue</button>',
+  copy: '<button class="icon-btn" data-act="copy" title="Copy link" aria-label="Copy link">' + icon('copy') + '</button>',
+  vlc: '<button class="icon-btn" data-act="vlc" title="Open in VLC" aria-label="Open in VLC">' + icon('vlc') + '</button>'
+};
+
+const views = {
+  today() {
+    const ready = geminiReady();
+    const tile = t => {
+      const inner = `${icon(t.icon)}<b>${esc(t.label)}</b><span>${esc(t.sub)}</span>`;
+      return ready || (t.needsPlace && !place())
+        ? `<button class="tile" data-ask="${t.id}" aria-busy="${GM.busy === t.id}">${inner}</button>`
+        : `<a class="tile" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-copyask="${t.id}">${inner}</a>`;
+    };
+    const a = GM.answer;
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">${esc(todayStr())}</div><h1>Today</h1>
+      <p>News, weather and more from Gemini, one tap away.</p></div></div>
+    <form class="panel" id="askForm" autocomplete="off"><div class="ask">
+      <div class="field">${icon('spark')}<input id="askInput" placeholder="Ask Gemini anything" aria-label="Ask Gemini"></div>
+      <button class="btn primary" type="submit">Ask</button></div></form>
+    <div class="mode"><span style="flex:1 1 260px;min-width:0"><span class="dot ${ready ? 'on' : ''}"></span> ${ready
+      ? `Answers show here, from Gemini with Google Search${GM.server ? ' (server key)' : ' (your API key)'}.`
+      : 'Tiles copy a ready-made question and open Gemini, so you just paste. To get answers right here, add a Gemini API key.'}</span>
+      ${ready ? '' : '<button class="btn ghost sm" data-act="geminiSetup">Add API key</button>'}
+      <span class="where">${icon('pin')}<input id="tCity" value="${esc(S.settings.city)}" placeholder="${GM.loc ? 'Using your location' : 'Your city'}" aria-label="Your city"><button class="btn ghost sm" data-act="locate">Use my location</button></span></div>
+    <div class="tiles">${TILES.map(tile).join('')}</div>
+    ${GM.err ? `<div class="notice bad" style="margin:0">${esc(GM.err)}</div>` : ''}
+    ${a ? `<section class="panel answer" aria-live="polite">
+      <div class="view-head"><div class="grow"><div class="eyebrow">Gemini${a.at ? ' · ' + new Date(a.at).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : ''}</div><h2 style="margin:2px 0 0;font:800 20px/1.2 var(--f-display)">${esc(a.label)}</h2></div>
+        ${a.text ? `<button class="btn sm" data-act="speak">${icon('speak')}Read aloud</button><button class="btn ghost sm" data-act="copyAnswer">${icon('copy')}Copy</button>` : ''}</div>
+      ${a.text ? `<div class="md">${md(a.text)}</div>` : '<div class="loading"><i></i>Asking Gemini…</div>'}
+      ${a.sources?.length ? `<div><div class="eyebrow" style="margin-bottom:6px">Sources</div><div class="sources">${a.sources.slice(0, 8).map(x => `<a href="${esc(x.uri)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a>`).join('')}</div></div>` : ''}
+    </section>` : ''}`;
+  },
+
+  browser() {
+    const bm = S.bookmarks.some(b => b.url === S.url);
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Web browser</div><h1>Find a video, send it to the TV</h1>
+      <p>Open a page or paste a link. Videos on the page show up below, ready to cast.</p></div></div>
+    <form class="panel" id="urlForm" autocomplete="off">
+      <div class="urlbar">
+        <div class="field">${icon('globe')}<input id="urlInput" name="url" value="${esc(S.url)}" placeholder="Search or enter a web address" aria-label="Web address"></div>
+        <button type="button" class="icon-btn star ${bm ? 'on' : ''}" data-act="bookmark" title="${bm ? 'Remove bookmark' : 'Bookmark this page'}" aria-label="Bookmark">${icon('star')}</button>
+        <button class="btn primary" type="submit">Go</button>
+      </div>
+      ${S.notice ? `<div class="notice ${S.notice.ok ? 'ok' : ''}">${esc(S.notice.text)}${S.notice.link ? ` <a href="${esc(S.notice.link)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Open site ↗</a>` : ''}</div>` : ''}
+    </form>
+    <section class="panel"><div class="panel-h"><h2>Videos on this page</h2><span class="chip">${S.detected.length}</span><div class="grow"></div>
+      ${S.detected.length > 1 ? '<button class="btn ghost sm" data-act="queueAll">' + icon('list') + 'Queue all</button>' : ''}</div>
+      <div class="list" data-list="detected">${S.detected.length ? S.detected.map(m => mediaRow(m, A.copy + A.vlc + A.queue + A.cast)).join('') : '<div class="empty"><b>No videos yet</b>Open a page or paste a direct link.</div>'}</div></section>
+    <section><div class="eyebrow" style="margin-bottom:10px">Start page</div><div class="sites">
+      ${SITES.map(s => `<button class="site" data-site="${s.id}"><b>${esc(s.name)}</b><span>${esc(s.blurb)}</span><small>${esc(s.url)}</small></button>`).join('')}
+    </div></section>`;
+  },
+
+  player() {
+    const it = P.item;
+    const dev = DEVICES.find(d => d.id === S.device);
+    const pct = !P.live && P.dur ? P.pos / P.dur * 100 : 0;
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">${dev ? 'Casting to ' + esc(dev.name) : 'Not connected'}</div><h1>Remote</h1></div>
+      <button class="btn" data-act="devices">${icon('cast')}${dev ? 'Change screen' : 'Connect'}</button></div>
+    ${M.stream ? `<div class="notice bad" style="margin:0">Your screen is being mirrored. Playing a video stops the mirror. <button class="btn ghost sm" data-act="openMirror">Go to mirroring</button></div>` : ''}
+    ${P.yt ? ytNotice() : ''}${vlcPanel()}
+    <div class="np">
+      <div class="tv"><div class="screen ${it ? '' : 'idle'}" id="screen"></div>
+        <div class="tv-foot"><span>${dev ? icon(dev.icon) + ' ' + esc(dev.kind) : 'No screen connected'}</span><span class="mono" id="srcState"></span></div></div>
+      <div class="panel remote">
+        <div><div class="eyebrow">${it ? (P.live ? 'Live channel' : 'Now playing') : 'Idle'}</div>
+          <div class="title">${it ? esc(it.title) : 'Nothing playing'}</div>
+          ${it ? `<div class="meta"><div class="s"><span class="chip fmt-${fmtOf(it.url)}">${fmtOf(it.url)}</span>${it.res && it.res !== '—' ? `<span>${esc(it.res)}</span>` : ''}${P.subName ? `<span>· CC ${esc(P.subName)}</span>` : ''}</div></div>` : '<p class="muted" style="margin:6px 0 0">Pick a video in the Browser, Queue, Local files or IPTV.</p>'}
+        </div>
+        <div class="seek">
+          <input type="range" id="seek" min="0" max="${Math.max(1, Math.round(P.dur))}" step="1" value="${Math.round(P.pos)}" style="--p:${pct}%" ${!it || P.live ? 'disabled' : ''} aria-label="Seek">
+          <div class="times mono"><span id="tPos">${fmt(P.pos)}</span><span id="tDur">${P.live ? 'LIVE' : '-' + fmt(P.dur - P.pos)}</span></div>
+        </div>
+        <div class="transport">
+          <button class="icon-btn" data-act="back" title="Back ${S.settings.skip}s" aria-label="Back ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('back')}</button>
+          <button class="icon-btn" data-act="stop" title="Stop casting" aria-label="Stop" ${!it ? 'disabled' : ''}>${icon('stop')}</button>
+          <button class="icon-btn big" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}" ${!it ? 'disabled' : ''}>${icon(P.playing ? 'pause' : 'play')}</button>
+          <button class="icon-btn" data-act="next" title="Next in queue" aria-label="Next in queue">${icon('next')}</button>
+          <button class="icon-btn" data-act="fwd" title="Forward ${S.settings.skip}s" aria-label="Forward ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('fwd')}</button>
+        </div>
+        <div class="knobs">
+          <div class="knob wide"><button class="icon-btn" data-act="mute" aria-label="${P.muted ? 'Unmute' : 'Mute'}" style="width:30px;height:30px">${icon(P.muted ? 'mute' : 'vol')}</button>
+            <input type="range" id="vol" min="0" max="100" value="${P.muted ? 0 : Math.round(P.vol * 100)}" style="--p:${P.muted ? 0 : P.vol * 100}%" aria-label="TV volume"><span class="mono muted" id="volTxt" style="width:34px;text-align:right">${P.muted ? 0 : Math.round(P.vol * 100)}</span></div>
+          <div class="knob"><label for="rate">Speed</label><select id="rate">${[.5, .75, 1, 1.25, 1.5, 2].map(r => `<option value="${r}" ${r === P.rate ? 'selected' : ''}>${r}×</option>`).join('')}</select></div>
+          <div class="knob"><label for="subBtn">Subtitles</label><button id="subBtn" class="btn ghost sm" data-act="subs" style="justify-content:flex-start;padding:0;background:none">${icon('cc')}${P.subName ? 'Turn off' : 'Load .srt / .vtt'}</button></div>
+        </div>
+        ${S.queue.length ? `<div class="meta" style="border-top:1px solid var(--line);padding-top:12px"><div class="eyebrow">Up next</div><div class="t" style="margin-top:6px">${esc(S.queue[0].title)}</div><div class="s">${S.queue.length} in queue · Autoplay ${S.settings.autoplay ? 'on' : 'off'}</div></div>` : ''}
+      </div>
+    </div>
+    ${P.yt ? ytPanel() : ''}`;
+  },
+
+  mirror() {
+    const dev = DEVICES.find(d => d.id === S.device);
+    const live = !!M.stream;
+    const sel = (id, label, opts, cur) => `<div class="knob"><label for="${id}">${label}</label><select id="${id}" ${live ? 'disabled' : ''}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+    const note = !dev ? 'Connect a screen to send the mirror to.'
+      : dev.real ? 'Nearby screens can’t take a mirror straight from a web page. Use your browser’s Cast screen option below to put it on the TV.'
+      : 'Demo receiver: the mirror shows in this preview. For a real TV, use the built-in mirroring steps below.';
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Screen mirroring</div><h1>Mirror your screen</h1>
+      <p>Show your whole screen, one window or a browser tab on the TV. Use it for slides, photos, games and sites that can’t be cast.</p></div></div>
+    <div class="mirror">
+      <div class="tv"><div class="screen" id="mscreen"></div>
+        <div class="tv-foot"><span>${dev ? icon(dev.icon) + ' ' + esc(dev.name) : 'No screen connected'}</span><span class="mono" id="mStats">${live ? '' : canCapture ? 'Ready' : 'Not supported here'}</span></div></div>
+      <div class="panel remote">
+        <div><span class="status ${live ? 'live' : 'ready'}">${live ? '<span class="rec-dot"></span>Live · <span id="mTime">0:00</span>' : 'Not mirroring'}</span>
+          <div class="title" style="margin-top:6px">${dev ? 'To ' + esc(dev.name) : 'No screen selected'}</div>
+          <p class="muted" style="margin:4px 0 0;font-size:13.5px">${note}</p></div>
+        <div class="knobs">
+          ${sel('m-surface', 'Share', [['monitor', 'Entire screen'], ['window', 'A window'], ['browser', 'A browser tab']], M.surface)}
+          ${sel('m-quality', 'Quality', [['720', '720p'], ['1080', '1080p'], ['1440', '1440p']], M.quality)}
+          ${sel('m-fps', 'Frame rate', [[15, '15 fps · docs'], [30, '30 fps · video'], [60, '60 fps · games']], M.fps)}
+          <div class="knob"><label for="m-audio">Sound</label><label style="display:flex;align-items:center;gap:8px;font-weight:600"><span class="switch"><input type="checkbox" id="m-audio" ${M.audio ? 'checked' : ''} ${live ? 'disabled' : ''}><i></i></span>${M.audio ? 'On' : 'Off'}</label></div>
+        </div>
+        ${live ? `<button class="btn" data-act="stopMirror" style="padding:12px">${icon('stop')}Stop mirroring</button>`
+               : `<button class="btn primary" data-act="startMirror" style="padding:12px">${icon('mirror')}Start mirroring</button>`}
+        ${dev ? '' : `<button class="btn ghost" data-act="devices">${icon('cast')}Connect a screen</button>`}
+      </div>
+    </div>
+    ${M.error ? `<div class="notice bad" style="margin:0">${esc(M.error)}</div>` : ''}
+    <section style="display:flex;flex-direction:column;gap:10px">
+      <div><div class="eyebrow">Built-in mirroring</div><p class="muted" style="margin:6px 0 0;max-width:65ch">Every phone and computer can mirror to a TV on its own. These steps work with any real TV on your Wi-Fi${GUIDES[0].you ? ', and the one marked “This device” fits what you’re using now' : ''}.</p></div>
+      <div class="guide">${GUIDES.map(g => `<article class="${g.you ? 'yours' : ''}"><h3>${icon(g.icon)}${esc(g.title)}${g.you ? '<span class="chip">This device</span>' : ''}</h3>
+        <ol>${g.steps.map(x => `<li>${x}</li>`).join('')}</ol><div class="works">${esc(g.works)}</div></article>`).join('')}</div>
+    </section>`;
+  },
+
+  queue() {
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Play queue</div><h1>Up next</h1><p>Videos play in this order on ${esc(devName())}.</p></div>
+      ${S.queue.length ? '<button class="btn" data-act="clearQueue">' + icon('x') + 'Clear</button><button class="btn" data-act="queueM3u">' + icon('vlc') + 'Save for VLC</button><button class="btn primary" data-act="next">' + icon('play') + 'Play next</button>' : ''}</div>
+    <section class="panel"><div class="list" data-list="queue">${S.queue.length ? S.queue.map((m, i) => mediaRow(m,
+      `<button class="icon-btn" data-act="up" aria-label="Move up" ${i ? '' : 'disabled'}>${icon('up')}</button><button class="icon-btn" data-act="down" aria-label="Move down" ${i < S.queue.length - 1 ? '' : 'disabled'}>${icon('down')}</button><button class="icon-btn" data-act="remove" aria-label="Remove">${icon('x')}</button>${A.cast}`,
+      `<span class="qnum">${i + 1}</span>`).replace('class="row ', 'class="row q ')).join('') : '<div class="empty"><b>The queue is empty</b>Use “Queue” on any video to line it up.</div>'}</div></section>`;
+  },
+
+  local() {
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">This device</div><h1>Local files</h1><p>Cast videos and music stored on this computer or phone. Files stay on your device.</p></div></div>
+    <label class="drop" id="drop" for="fileIn">${icon('upload')}<b>Drop videos here or choose files</b><span class="muted">MP4, WebM, MOV, MKV, MP3, M4A</span>
+      <span class="btn primary">${icon('folder')}Choose files</span><input id="fileIn" type="file" accept="video/*,audio/*,.mkv" multiple hidden></label>
+    <section class="panel"><div class="panel-h"><h2>Added this session</h2><span class="chip">${S.local.length}</span></div>
+      <div class="list" data-list="local">${S.local.length ? S.local.map(m => mediaRow(m, A.queue + A.cast)).join('') : '<div class="empty"><b>No files yet</b>Files you add appear here.</div>'}</div></section>`;
+  },
+
+  iptv() {
+    const ch = parseM3U(S.m3u);
+    const groups = ['All', ...new Set(ch.map(c => c.group))];
+    const q = S.chSearch.toLowerCase();
+    const shown = ch.filter(c => (S.group === 'All' || c.group === S.group) && (!q || c.title.toLowerCase().includes(q)));
+    views._ch = ch;
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">M3U playlist</div><h1>IPTV channels</h1><p>${ch.length} channels in ${groups.length - 1} groups.</p></div></div>
+    <section class="panel">
+      <div class="iptv-tools"><div class="search">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="Search channels" aria-label="Search channels"></div>
+        <div class="chips">${groups.map(g => `<button class="fchip" data-group="${esc(g)}" aria-pressed="${g === S.group}">${esc(g)}</button>`).join('')}</div></div>
+      <div class="channels" data-list="iptv">${shown.map(c => `<button class="ch" data-ch="${c.id}">${thumb({ ...c, duration: 0 })}<div class="cm"><b>${esc(c.title)}</b><span>${esc(c.group)} · ${fmtOf(c.url)}</span></div></button>`).join('') || '<div class="empty"><b>No channels match</b>Try another group or search.</div>'}</div>
+      <details class="import"><summary>Load a playlist</summary><div class="body">
+        <textarea id="m3uText" aria-label="M3U playlist">${esc(S.m3u)}</textarea>
+        <div class="actions" style="flex-wrap:wrap"><label class="btn" for="m3uFile">${icon('upload')}Open .m3u file</label><input id="m3uFile" type="file" accept=".m3u,.m3u8,text/plain" hidden>
+          <button class="btn ghost" data-act="m3uSample">Reset to sample</button><div style="flex:1"></div><button class="btn primary" data-act="m3uApply">Load channels</button></div>
+      </div></details>
+    </section>`;
+  },
+
+  bookmarks() {
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Saved pages</div><h1>Bookmarks</h1><p>Pages you return to for videos. Tap the star in the address bar to add one.</p></div></div>
+    <section class="panel"><div class="list" data-list="bookmarks">${S.bookmarks.length ? S.bookmarks.map(b => `<div class="row" data-id="${b.id}" style="grid-template-columns:40px minmax(0,1fr) auto">
+      <div class="dev" style="padding:0;border:0"><span class="ico">${icon('star')}</span></div>
+      <div class="meta"><div class="t">${esc(b.title)}</div><div class="u">${esc(b.url)}</div></div>
+      <div class="actions"><button class="icon-btn" data-act="unbookmark" aria-label="Remove bookmark">${icon('x')}</button><button class="btn sm" data-act="openBm">${icon('globe')}Open</button></div></div>`).join('') : '<div class="empty"><b>No bookmarks</b>Use the star in the Browser to save a page.</div>'}</div></section>`;
+  },
+
+  history() {
+    const day = t => { const d = Math.floor((Date.now() - t) / 864e5); return d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d + ' days ago'; };
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Recently cast</div><h1>History</h1><p>Pick up where you left off. Resume ${S.settings.resume ? 'is on' : 'is off'}.</p></div>
+      ${S.history.length ? '<button class="btn" data-act="clearHistory">' + icon('x') + 'Clear history</button>' : ''}</div>
+    <section class="panel"><div class="list" data-list="history">${S.history.length ? S.history.map(h => mediaRow({ ...h, res: `${day(h.at)} · stopped at ${fmt(h.pos)}${h.duration ? ' of ' + fmt(h.duration) : ''}` }, A.queue + `<button class="btn primary sm" data-act="cast">${icon('play')}${h.pos > 5 ? 'Resume' : 'Cast'}</button>`)).join('') : '<div class="empty"><b>Nothing cast yet</b>Videos you play show up here.</div>'}</div></section>`;
+  },
+
+  settings() {
+    const st = S.settings;
+    const sw = (id, on) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><i></i></label>`;
+    const sel = (id, vals, cur) => `<select id="${id}">${vals.map(v => `<option ${String(v) === String(cur) ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+    return `<div class="view-head"><div class="grow"><div class="eyebrow">Preferences</div><h1>Settings</h1></div></div>
+    <section class="panel">
+      <div class="panel-h"><h2>Playback</h2></div>
+      <div class="set"><div><b>Autoplay next in queue</b><span>Start the next video when one ends.</span></div>${sw('s-autoplay', st.autoplay)}</div>
+      <div class="set"><div><b>Resume where I left off</b><span>Uses your history to continue a video.</span></div>${sw('s-resume', st.resume)}</div>
+      <div class="set"><div><b>Skip buttons jump</b><span>Seconds for back and forward.</span></div>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
+      <div class="set"><div><b>Preferred quality</b><span>For adaptive (HLS/DASH) streams.</span></div>${sel('s-quality', ['Auto', '1080p', '720p', '480p'], st.quality)}</div>
+    </section>
+    <section class="panel" id="geminiSettings">
+      <div class="panel-h"><h2>Today (Gemini)</h2></div>
+      <div class="set"><div><b>Gemini API key</b><span>${GM.server ? 'This server already has a key, so this one is only used if you open the app elsewhere.' : 'Lets answers show in the app. Get a free key at aistudio.google.com/apikey. It’s stored on this device only.'}</span></div><input id="s-geminiKey" type="password" value="${esc(st.geminiKey)}" placeholder="AIza…" autocomplete="off" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
+      <div class="set"><div><b>Gemini model</b><span>Any model that supports Google Search grounding.</span></div><input id="s-geminiModel" value="${esc(st.geminiModel)}" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
+      <div class="set"><div><b>News country</b><span>Two-letter code, for example US, GB, IN. Leave empty to use ${esc(country())}.</span></div><input id="s-region" value="${esc(st.region)}" maxlength="2" placeholder="${esc(REGION)}" style="width:80px;height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);text-transform:uppercase"></div>
+      <div class="set"><div><b>Temperature</b><span>Used for weather.</span></div>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Subtitles</h2></div>
+      <div class="set"><div><b>Text size on TV</b><span>Applies to .srt and .vtt files.</span></div>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Devices</h2></div>
+      <div class="set"><div><b>Suggest VLC for unsupported videos</b><span>Offers VLC when a format such as MKV, AVI or DASH won’t play in the browser.</span></div>${sw('s-vlcFallback', st.vlcFallback)}</div>
+      <div class="set"><div><b>VLC bridge address</b><span>Where the StreamBeam server (server.mjs) runs. Leave empty to use ${esc(vlcBase())}.</span></div><input id="s-vlcBridge" value="${esc(st.vlcBridge)}" placeholder="http://localhost:8090" style="width:min(240px,100%);height:36px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);font:13px var(--f-mono)"></div>
+      <div class="set"><div><b>Show demo devices</b><span>Simulated Chromecast, Roku, Fire TV, DLNA and AirPlay receivers for trying the app. “Nearby screen” uses your browser’s real casting.</span></div>${sw('s-demo', st.demo)}</div>
+    </section>`;
+  }
+};
+
+function ytLink() {
+  const y = P.yt; if (!y) return '';
+  return y.id ? `https://www.youtube.com/watch?v=${y.id}${y.list ? '&list=' + y.list : ''}${P.pos > 5 ? '&t=' + Math.floor(P.pos) + 's' : ''}` : ytUrl(y);
+}
+function vlcPanel() {
+  if (S.device === 'vlc' && !V.ok) {
+    const pw = 'choose-a-password';
+    return `<section class="panel yt-tv"><h2>${icon('vlc')} Connect VLC</h2>
+      ${V.err ? `<div class="notice bad" style="margin:0">${esc(V.err)}</div>` : ''}
+      <ol class="vlc-steps">
+        <li><b>Turn on VLC’s web interface.</b> In VLC: Tools → Preferences → Show settings: <b>All</b> → Interface → Main interfaces → tick <b>Web</b>. Then under Main interfaces → Lua, set a password. Restart VLC. Or start it with <code>vlc --extraintf http --http-password ${pw}</code></li>
+        <li><b>Start the StreamBeam server</b> on the same computer: <code>VLC_PASSWORD=${pw} node web/server.mjs</code>. Add <code>BIND=0.0.0.0</code> to use your phone as the remote.</li>
+        <li><b>Open StreamBeam from the server</b> at <code>http://localhost:8090</code>, or <code>http://&lt;computer-ip&gt;:8090</code> on your phone.</li>
+      </ol>
+      <div class="bridge"><input id="vlcBridge" value="${esc(S.settings.vlcBridge)}" placeholder="${esc(vlcBase())}" aria-label="Bridge address"><button class="btn primary" data-act="vlcConnect" ${V.busy ? 'disabled' : ''}>${V.busy ? 'Connecting…' : 'Connect to VLC'}</button></div>
+    </section>`;
+  }
+  const it = P.item;
+  if (!it || vlcOn() || P.yt || !S.settings.vlcFallback) return '';
+  const f = fmtOf(it.url);
+  if (!(NEEDS_VLC.includes(f) || P.vidErr)) return '';
+  return `<div class="notice" style="margin:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:220px">${P.vidErr ? 'The browser couldn’t decode this video.' : `Browsers can’t play ${f} on their own.`} VLC plays it, with every codec built in.</span>
+    <button class="btn sm" data-act="vlc">${icon('vlc')}Open in VLC</button>${canVlc(it.url) ? `<button class="btn primary sm" data-act="vlcUse">${icon('cast')}Cast to VLC</button>` : ''}</div>`;
+}
+
+function ytNotice() {
+  const msg = {
+    loading: ['', 'Loading the YouTube player…'],
+    blocked: ['bad', 'YouTube can’t load inside this page (it blocks the YouTube player). Open the app directly in a browser, or use one of the options below to watch on a real TV.'],
+    noembed: ['bad', 'The owner of this video doesn’t allow it to play outside YouTube. Use one of the options below instead.'],
+    missing: ['bad', 'This video is private, removed or unavailable in your country.'],
+    badid: ['bad', 'This YouTube link isn’t valid. Copy it again from YouTube with Share → Copy link.'],
+    config: ['bad', 'YouTube refused the player here. Serve the app from a web address (for example run npx serve) instead of opening the file directly.'],
+    html5: ['bad', 'YouTube couldn’t play this video in the browser.'],
+    error: ['bad', 'YouTube couldn’t play this video.']
+  }[P.ytState];
+  const file = location.protocol === 'file:' && P.ytState !== 'ok';
+  return msg ? `<div class="notice ${msg[0]}" style="margin:0">${msg[1]}${file && P.ytState !== 'config' ? ' YouTube also needs the app served from a web address, not opened as a file.' : ''}</div>` : '';
+}
+function ytPanel() {
+  const real = DEVICES.find(d => d.id === S.device)?.real || !S.settings.demo;
+  return `<section class="panel yt-tv"><h2>${icon('tv')} Put this YouTube video on a real TV${real ? '' : '<span class="muted" style="font-weight:500"> · the demo TV above is a preview</span>'}</h2>
+    <div class="yt-opts">
+      <div><b>Cast from the YouTube app</b>Opens the video at ${fmt(P.pos)}. On a phone it opens the YouTube app: tap the Cast button and pick your TV.
+        <span class="actions"><a class="btn primary sm" href="${esc(ytLink())}" target="_blank" rel="noopener">Open in YouTube ↗</a><button class="icon-btn" data-act="ytCopy" title="Copy link" aria-label="Copy YouTube link">${icon('copy')}</button></span></div>
+      <div><b>Link with TV code</b>On the TV’s YouTube app: Settings → Link with TV code. Then in YouTube on your phone: Settings → Watch on TV → Enter TV code.</div>
+      <div><b>Mirror this tab</b>Sends this tab, sound included, to any TV your browser can cast to.
+        <button class="btn sm" data-act="ytMirror">${icon('mirror')}Set up mirroring</button></div>
+    </div></section>`;
+}
+
+function renderScreen() {
+  const el = $('#screen'); if (!el) return;
+  const it = P.item;
+  if (!it) {
+    el.innerHTML = `<div class="poster" style="background:radial-gradient(circle at 50% 40%, #1d2633, #05070a 70%)"><p style="opacity:.6">${S.device ? esc(devName()) + ' is ready' : 'Connect a screen'}</p></div>`;
+    $('#srcState') && ($('#srcState').textContent = '');
+    return;
+  }
+  el.innerHTML = `<div class="poster" style="${poster(it.title)}"><h3>${esc(it.title)}</h3><p>${esc(fmtOf(it.url))} · ${esc(it.res || '')}</p></div>
+    <div class="osd"><span class="rec"><span class="dot"></span>${esc(devName())}</span><span id="osdTime">${P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur)}</span></div>
+    <div class="cue" id="cue" hidden></div><div class="pause-ind" id="pauseInd" ${P.playing ? 'hidden' : ''}><span>${icon('pause')}</span></div>`;
+  video.hidden = !P.real;
+  el.insertBefore(video, el.querySelector('.osd'));
+  $('#srcState').textContent = P.real ? 'Streaming' : P.yt ? (P.ytState === 'ok' ? 'YouTube player' : 'Receiver preview') : 'Receiver preview';
+  tick(true);
+  placeYT();
+}
+
+function renderMirrorScreen() {
+  const el = $('#mscreen'); if (!el) return;
+  if (!M.stream) {
+    el.innerHTML = `<div class="mirror-idle">${icon('mirror')}<b>${canCapture ? 'Nothing shared yet' : 'Screen capture isn’t available'}</b><span>${canCapture ? 'Press Start mirroring, then pick a screen, window or tab.' : 'This browser can’t capture the screen. Use the built-in mirroring steps below.'}</span></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="osd"><span class="rec"><span class="rec-dot"></span>MIRROR · ${esc(devName())}</span><span id="mTime2"></span></div>`;
+  el.insertBefore(mvid, el.firstChild);
+  mvid.play().catch(() => {});
+}
+
+function tick(full) {
+  const pct = !P.live && P.dur ? Math.min(100, P.pos / P.dur * 100) : (P.item ? 100 : 0);
+  const bar = $('#miniBar'); if (bar) bar.style.width = pct + '%';
+  const mt = $('#miniTime'); if (mt) mt.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
+  const sk = $('#seek');
+  if (sk && document.activeElement !== sk) { sk.value = Math.round(P.pos); sk.style.setProperty('--p', pct + '%'); }
+  const tp = $('#tPos'); if (tp) tp.textContent = fmt(P.pos);
+  const td = $('#tDur'); if (td) td.textContent = P.live ? 'LIVE' : '-' + fmt(Math.max(0, P.dur - P.pos));
+  const ot = $('#osdTime'); if (ot) ot.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
+  const pi = $('#pauseInd'); if (pi) pi.hidden = P.playing;
+  const cue = $('#cue');
+  if (cue) {
+    const c = P.subs && P.subs.find(c => P.pos >= c.a && P.pos <= c.z);
+    cue.hidden = !c; if (c) cue.textContent = c.text;
+    cue.style.fontSize = { Small: '12px', Medium: '15px', Large: '19px' }[S.settings.subSize];
+  }
+  if (full) { renderMini(); const tb = document.querySelector('[data-act="toggle"]'); if (tb) { tb.innerHTML = icon(P.playing ? 'pause' : 'play'); tb.setAttribute('aria-label', P.playing ? 'Pause' : 'Play'); } }
+}
+
+function renderMini() {
+  const m = $('#mini');
+  const it = P.item;
+  if (M.stream) {
+    m.innerHTML = `<div class="bar"><i style="width:100%;background:var(--bad)"></i></div><span class="rec-dot"></span>
+      <div class="meta" data-act="openMirror"><div class="t">Mirroring your screen</div><div class="s"><span class="mono" id="mMini">${fmt((Date.now() - M.at) / 1000)}</span><span>· ${esc(devName())}</span></div></div>
+      <div class="ctl"><button class="btn sm" data-act="stopMirror">${icon('stop')}Stop</button></div>`;
+    return;
+  }
+  if (!it) {
+    m.innerHTML = `<div class="bar"><i id="miniBar"></i></div><div class="meta"><div class="t muted" style="font-weight:600">${S.device === 'local' ? 'Playing on this device' : S.device ? 'Connected to ' + esc(devName()) : 'Not connected'}</div><div class="s">Nothing playing${S.queue.length ? ' · ' + S.queue.length + ' in queue' : ''}</div></div>
+      <div class="ctl">${S.queue.length ? `<button class="btn primary sm" data-act="next">${icon('play')}Play queue</button>` : ''}</div>`;
+    return;
+  }
+  m.innerHTML = `<div class="bar"><i id="miniBar"></i></div>${thumb(it)}
+    <div class="meta" data-act="openPlayer"><div class="t">${esc(it.title)}</div><div class="s"><span class="mono" id="miniTime"></span><span>· ${esc(devName())}</span></div></div>
+    <div class="ctl"><button class="icon-btn hide-sm" data-act="back" aria-label="Back ${S.settings.skip} seconds">${icon('back')}</button>
+      <button class="icon-btn play" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}">${icon(P.playing ? 'pause' : 'play')}</button>
+      <button class="icon-btn hide-sm" data-act="fwd" aria-label="Forward ${S.settings.skip} seconds">${icon('fwd')}</button>
+      <button class="icon-btn" data-act="next" aria-label="Next in queue">${icon('next')}</button></div>`;
+  tick();
+}
+
+function render() {
+  document.querySelectorAll('#nav button').forEach(b => b.dataset.view === S.view ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  $('#qBadge').textContent = S.queue.length;
+  const dev = DEVICES.find(d => d.id === S.device);
+  $('#castLabel').textContent = dev ? dev.name : S.device === 'local' ? 'This device' : 'Not connected';
+  $('#castBtn').classList.toggle('on', !!dev);
+  if (video.parentNode !== document.body) document.body.appendChild(video);
+  if (mvid.parentNode !== document.body) document.body.appendChild(mvid);
+  main.innerHTML = `<div class="view">${views[S.view]()}</div>`;
+  if (S.view === 'player') renderScreen();
+  if (S.view === 'mirror') renderMirrorScreen();
+  placeYT();
+  renderMini();
+}
+
+/* ---------- Device sheet ---------- */
+const scrim = $('#scrim');
+function openDevices() {
+  S.scanning = true; drawDevices(); scrim.hidden = false;
+  setTimeout(() => { S.scanning = false; if (!scrim.hidden) drawDevices(); }, 1600);
+}
+function drawDevices() {
+  const list = DEVICES.filter(d => d.real || S.settings.demo);
+  const shown = S.scanning ? list.slice(0, 3) : list;
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="devTitle">
+    <header><h2 id="devTitle">Cast to</h2><button class="icon-btn" data-act="closeDev" aria-label="Close">${icon('x')}</button></header>
+    <div class="scan"><span class="radar ${S.scanning ? 'on' : ''}"></span>${S.scanning ? 'Looking for screens on your Wi-Fi…' : `${list.length} screens found on your network`}</div>
+    ${shown.map(d => `<button class="dev ${d.id === S.device ? 'on' : ''}" data-dev="${d.id}"><span class="ico">${icon(d.icon)}</span><span class="dm"><b>${esc(d.name)}</b><span>${esc(d.kind)}${d.real ? '' : ' · demo'}</span></span>${d.id === S.device ? '<span class="state">CONNECTED</span>' : ''}</button>`).join('')}
+    <button class="dev ${S.device === 'local' ? 'on' : ''}" data-dev="local"><span class="ico">${icon('phone')}</span><span class="dm"><b>Play on this device</b><span>Watch here instead of casting</span></span></button>
+    <footer><button class="btn" data-act="mirrorFromSheet">${icon('mirror')}Mirror screen</button><div style="flex:1"></div><button class="btn ghost" data-act="rescan">${icon('refresh')}Scan again</button>${S.device ? `<button class="btn" data-act="disconnect">Disconnect</button>` : ''}</footer></div>`;
+  scrim.querySelector('.dev')?.focus();
+}
+scrim.addEventListener('click', e => {
+  if (e.target === scrim) { scrim.hidden = true; return; }
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.act === 'closeDev') scrim.hidden = true;
+  else if (b.dataset.act === 'rescan') openDevices();
+  else if (b.dataset.act === 'vlcCopy') { navigator.clipboard.writeText(vlcSheetItem.url).then(() => toast('Link copied. Paste it in VLC.'), () => toast('Copy blocked. Select the link above.')); }
+  else if (b.dataset.act === 'vlcM3u') saveM3u([vlcSheetItem], vlcSheetItem.title);
+  else if (b.dataset.act === 'vlcSend') { scrim.hidden = true; S.device = 'vlc'; save(); if (canVlc(vlcSheetItem.url)) playItem(vlcSheetItem); else toast('VLC can’t open files from the browser'); }
+  else if (b.dataset.act === 'mirrorFromSheet') { scrim.hidden = true; S.view = 'mirror'; render(); }
+  else if (b.dataset.act === 'disconnect') { S.device = ''; save(); scrim.hidden = true; toast('Disconnected'); render(); }
+  else if ('dev' in b.dataset) {
+    S.device = b.dataset.dev; save(); scrim.hidden = true;
+    if (S.device === 'remote') promptRemote();
+    else if (S.device === 'vlc') { vlcConnect().then(ok => { if (ok && P.item && canVlc(P.item.url)) playItem(P.item, { from: P.pos }); }); S.view = 'player'; }
+    else toast(S.device === 'local' ? 'Playing on this device' : `Connected to ${devName()}`);
+    render();
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !scrim.hidden) { scrim.hidden = true; $('#castBtn').focus(); return; }
+  if (e.target.matches('input, textarea, select')) return;
+  if (e.key === ' ' && P.item) { e.preventDefault(); toggle(); }
+  if (e.key === 'ArrowLeft') seek(P.pos - S.settings.skip);
+  if (e.key === 'ArrowRight') seek(P.pos + S.settings.skip);
+  if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) { S.view = 'today'; render(); $('#askInput')?.focus(); e.preventDefault(); }
+});
+
+/* ---------- Events ---------- */
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2400); }
+
+$('#nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) { S.view = b.dataset.view; render(); main.scrollTop = 0; } });
+$('#castBtn').addEventListener('click', openDevices);
+$('#themeBtn').addEventListener('click', () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches || !matchMedia('(prefers-color-scheme: light)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+  store.set('theme', r.dataset.theme);
+});
+{ const t = store.get('theme', null); if (t) document.documentElement.dataset.theme = t; }
+
+function findItem(row) {
+  const list = row.closest('[data-list]')?.dataset.list; const id = row.dataset.id;
+  const src = { detected: S.detected, queue: S.queue, local: S.local, history: S.history, bookmarks: S.bookmarks }[list] || [];
+  return { list, arr: src, idx: src.findIndex(x => x.id === id), item: src.find(x => x.id === id) };
+}
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act],[data-site],[data-ch],[data-group],[data-ask],[data-copyask]');
+  if (!b || scrim.contains(b)) return;
+  if (b.dataset.ask) return ask(b.dataset.ask);
+  if (b.dataset.copyask) {
+    const t = TILES.find(x => x.id === b.dataset.copyask);
+    navigator.clipboard.writeText(t.prompt()).then(() => toast('Question copied. Paste it in Gemini.'), () => toast('Opening Gemini. Ask: ' + t.label));
+    return;
+  }
+  if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
+  if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(c, { from: 0 }); }
+  if (b.dataset.group) { S.group = b.dataset.group; return render(); }
+  const act = b.dataset.act;
+  const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
+  switch (act) {
+    case 'cast': if (ctx.list === 'queue') { S.queue.splice(ctx.idx, 1); save(); } playItem(ctx.item, ctx.list === 'history' ? { from: ctx.item.pos > 5 ? ctx.item.pos : 0 } : {}); break;
+    case 'enqueue': S.queue.push({ ...ctx.item, id: uid() }); save(); toast(`Added to queue · ${S.queue.length} up next`); render(); break;
+    case 'queueAll': S.detected.forEach(m => S.queue.push({ ...m, id: uid() })); save(); toast(`Queued ${S.detected.length} videos`); render(); break;
+    case 'copy': try { await navigator.clipboard.writeText(ctx.item.url); toast('Link copied'); } catch { toast('Copy blocked. Select the link text instead.'); } break;
+    case 'remove': S.queue.splice(ctx.idx, 1); save(); render(); break;
+    case 'up': case 'down': { const j = ctx.idx + (act === 'up' ? -1 : 1); [S.queue[ctx.idx], S.queue[j]] = [S.queue[j], S.queue[ctx.idx]]; save(); render(); break; }
+    case 'clearQueue': S.queue = []; save(); toast('Queue cleared'); render(); break;
+    case 'clearHistory': S.history = []; save(); toast('History cleared'); render(); break;
+    case 'toggle': toggle(); break;
+    case 'back': seek(P.pos - S.settings.skip); break;
+    case 'fwd': seek(P.pos + S.settings.skip); break;
+    case 'stop': stop(); toast('Stopped casting'); break;
+    case 'next': next(); break;
+    case 'mute': P.muted = !P.muted; video.muted = P.muted; if (ytOn()) P.muted ? Y.player.mute() : Y.player.unMute(); send('volume', { val: P.muted ? 0 : Math.round(P.vol * 256) }); render(); break;
+    case 'vlc': openVlcSheet(ctx.item || P.item); break;
+    case 'openToday': S.view = 'today'; render(); main.scrollTop = 0; $('#askInput')?.focus(); break;
+    case 'geminiSetup': S.view = 'settings'; render(); $('#geminiSettings')?.scrollIntoView(); $('#s-geminiKey')?.focus(); break;
+    case 'locate': locate(); break;
+    case 'speak': speak(); break;
+    case 'copyAnswer': try { await navigator.clipboard.writeText(GM.answer.text); toast('Copied'); } catch { toast('Copy blocked. Select the text instead.'); } break;
+    case 'vlcConnect': S.settings.vlcBridge = ($('#vlcBridge')?.value || '').trim(); save(); vlcConnect(); break;
+    case 'vlcUse': S.device = 'vlc'; save(); if (P.item) playItem(P.item, { from: P.pos }); else vlcConnect(); break;
+    case 'queueM3u': saveM3u(S.queue, 'StreamBeam queue'); break;
+    case 'ytMirror': S.view = 'mirror'; M.surface = 'browser'; saveMirror(); render(); break;
+    case 'ytCopy': try { await navigator.clipboard.writeText(ytLink()); toast('YouTube link copied'); } catch { toast('Copy blocked. Use Open in YouTube instead.'); } break;
+    case 'subs': if (P.subName) { P.subs = null; P.subName = ''; render(); } else $('#subFile').click(); break;
+    case 'devices': openDevices(); break;
+    case 'openPlayer': S.view = 'player'; render(); break;
+    case 'openMirror': S.view = 'mirror'; render(); break;
+    case 'startMirror': startMirror(); break;
+    case 'stopMirror': stopMirror(); break;
+    case 'bookmark': {
+      const i = S.bookmarks.findIndex(x => x.url === S.url);
+      if (i >= 0) { S.bookmarks.splice(i, 1); toast('Bookmark removed'); }
+      else { let t; try { t = new URL(S.url).hostname.replace(/^www\./, ''); } catch { t = S.url; } S.bookmarks.unshift({ id: uid(), title: SITES.find(s => s.url === S.url)?.name || t, url: S.url }); toast('Bookmarked'); }
+      save(); render(); break;
+    }
+    case 'unbookmark': S.bookmarks.splice(ctx.idx, 1); save(); render(); break;
+    case 'openBm': S.view = 'browser'; browse(ctx.item.url); break;
+    case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`Loaded ${parseM3U(S.m3u).length} channels`); render(); break;
+    case 'm3uSample': S.m3u = SAMPLE_M3U; S.group = 'All'; save(); render(); break;
+  }
+});
+
+document.addEventListener('submit', e => {
+  if (e.target.id === 'urlForm') { e.preventDefault(); browse($('#urlInput').value); }
+  if (e.target.id === 'askForm') {
+    e.preventDefault(); const q = $('#askInput').value.trim(); if (!q) return;
+    if (geminiReady()) ask(null, q);
+    else { navigator.clipboard.writeText(q).catch(() => {}); GM.err = ''; toast('Question copied. Opening Gemini.'); const a = document.createElement('a'); a.href = 'https://gemini.google.com/app'; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'seek') { t.style.setProperty('--p', (t.value / t.max * 100) + '%'); $('#tPos').textContent = fmt(+t.value); }
+  if (t.id === 'vol') { P.vol = t.value / 100; P.muted = P.vol === 0; video.volume = P.vol; video.muted = P.muted; if (ytOn()) { Y.player.setVolume(+t.value); P.muted ? Y.player.mute() : Y.player.unMute(); } clearTimeout(V.volT); V.volT = setTimeout(() => send('volume', { val: Math.round(P.vol * 256) }), 150); t.style.setProperty('--p', t.value + '%'); $('#volTxt').textContent = t.value; }
+  if (t.id === 'chSearch') { S.chSearch = t.value; const pos = t.selectionStart; render(); const n = $('#chSearch'); n.focus(); n.setSelectionRange(pos, pos); }
+});
+document.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.id === 'seek') seek(+t.value);
+  if (t.id?.startsWith('m-')) {
+    const k = t.id.slice(2);
+    M[k] = t.type === 'checkbox' ? t.checked : (k === 'fps' ? +t.value : t.value);
+    saveMirror(); if (k === 'audio') render();
+  }
+  if (t.id === 'rate') { P.rate = +t.value; video.playbackRate = P.rate; if (ytOn()) Y.player.setPlaybackRate(P.rate); send('rate', { val: P.rate }); }
+  if (t.id?.startsWith('s-')) {
+    const k = t.id.slice(2);
+    S.settings[k] = t.type === 'checkbox' ? t.checked : k === 'skip' ? +t.value : k === 'units' ? { '°C': 'C', '°F': 'F' }[t.value] || '' : k === 'region' ? t.value.trim().toUpperCase() : ['vlcBridge', 'geminiKey', 'geminiModel'].includes(k) ? t.value.trim() : t.value;
+    if (k === 'vlcBridge') V.ok = false;
+    if (k === 'demo' && !t.checked && S.device && S.device !== 'remote') S.device = '';
+    save(); toast('Saved'); render();
+  }
+  if (t.id === 'fileIn') addFiles(t.files);
+  if (t.id === 'tCity') { S.settings.city = t.value.trim(); save(); render(); }
+  if (t.id === 'm3uFile' && t.files[0]) { $('#m3uText').value = await t.files[0].text(); }
+});
+function addFiles(files) {
+  [...files].forEach(f => {
+    const url = URL.createObjectURL(f);
+    S.local.push({ id: uid(), title: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, url, res: f.type || 'video', size: (f.size / 1048576).toFixed(1) + ' MB', duration: 0 });
+  });
+  toast(`Added ${files.length} file${files.length > 1 ? 's' : ''}`); render();
+}
+['dragover', 'dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => {
+  const d = e.target.closest?.('#drop'); if (!d) return;
+  e.preventDefault(); d.classList.toggle('over', ev === 'dragover');
+  if (ev === 'drop' && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+}));
+
+/* ---------- Boot: open in a realistic working state ---------- */
+load({ ...SITES[0].media[0], id: uid() }, 134);
+render();
+if (S.device === 'vlc') vlcConnect(true);
+/* Installable app: offline shell (only when served over http(s) from the StreamBeam server or any static host) */
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+geminiStatus().then(() => {
+  /* Home-screen shortcuts open ?go=<tile|view>; a #<tile|view> link works too */
+  const go = new URLSearchParams(location.search).get('go') || location.hash.slice(1);
+  if (TILES.some(t => t.id === go)) ask(go);
+  else if (views[go] && !go.startsWith('_')) { S.view = go; render(); }
+});
+})();
+</script>
+<!-- APP-END -->
+</body>
+</html>
