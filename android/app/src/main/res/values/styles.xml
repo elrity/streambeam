@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- White by default (the app has its own Dark setting); bars match the top and bottom of the page -->
     <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
-        <item name="android:statusBarColor">@color/bg</item>
-        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:statusBarColor">@color/bar_top</item>
+        <item name="android:navigationBarColor">@color/bar_bottom</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

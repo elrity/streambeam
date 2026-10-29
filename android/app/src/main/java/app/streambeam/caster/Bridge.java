@@ -3,10 +3,14 @@ package app.streambeam.caster;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.view.View;
+import android.view.Window;
 import android.webkit.WebView;
 
 import androidx.webkit.JavaScriptReplyProxy;
@@ -107,6 +111,10 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 active = null;
                 done.ok();
                 break;
+            case "theme":
+                applyTheme(a.optBoolean("dark"), a.optString("top", "#D9DADE"), a.optString("bottom", "#FCFCFD"));
+                done.ok();
+                break;
             case "openCastSettings":
                 openCastSettings();
                 done.ok();
@@ -153,6 +161,24 @@ class Bridge implements WebViewCompat.WebMessageListener {
         main.removeCallbacks(endScan);
         main.postDelayed(endScan, SCAN_MS);
         devicesChanged();
+    }
+
+    /** Status and navigation bars take the colours at the top and bottom of the page, with matching icons. */
+    @SuppressWarnings("deprecation")
+    private void applyTheme(boolean dark, String top, String bottom) {
+        Window w = activity.getWindow();
+        try {
+            w.setStatusBarColor(Color.parseColor(top));
+            w.setNavigationBarColor(Color.parseColor(bottom));
+        } catch (IllegalArgumentException ignored) {
+        }
+        View decor = w.getDecorView();
+        int flags = decor.getSystemUiVisibility();
+        flags = dark ? flags & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR : flags | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            flags = dark ? flags & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : flags | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        decor.setSystemUiVisibility(flags);
     }
 
     private void openCastSettings() {
