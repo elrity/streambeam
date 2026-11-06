@@ -176,7 +176,7 @@ input[type=range]:disabled { opacity: .45; }
 .chip { flex: none; min-height: 34px; padding: 0 14px; border-radius: 12px; box-shadow: var(--raise-sm); font: 500 10.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .chip[aria-pressed="true"] { box-shadow: var(--inset-sm); color: var(--fg); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
-.tile { aspect-ratio: 1.4; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; border-radius: 20px; box-shadow: var(--raise-sm); text-align: left; text-decoration: none; color: var(--fg); min-width: 0; }
+.tile { aspect-ratio: 1.9; gap: 6px; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; border-radius: 20px; box-shadow: var(--raise-sm); text-align: left; text-decoration: none; color: var(--fg); min-width: 0; }
 .tile:active, .tile[aria-busy="true"] { box-shadow: var(--inset-sm); }
 .tile b { font-weight: 400; font-size: 15px; }
 .answer { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
@@ -213,9 +213,9 @@ details.more .body { padding: 0 20px 18px; display: flex; flex-direction: column
 .steps b { color: var(--fg); font-weight: 400; }
 code { font: 12px/1.5 var(--f-mono); overflow-wrap: anywhere; }
 kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-shadow: var(--raise-sm); }
-.big-go { align-self: center; width: 150px; height: 150px; border-radius: 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; box-shadow: var(--raise); color: var(--fg); }
+.big-go { align-self: center; width: 124px; height: 124px; border-radius: 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; box-shadow: var(--raise); color: var(--fg); }
 .big-go:active, .big-go.on { box-shadow: var(--inset); }
-.big-go svg.i { width: 34px; height: 34px; }
+.big-go svg.i { width: 30px; height: 30px; }
 .big-go.on { color: var(--warm); }
 
 /* Mini player: part of the layout (never covers content) */
@@ -450,7 +450,7 @@ const DEMO = [
 /* ---------- State ---------- */
 const S = {
   view: 'home',
-  libTab: 'history',
+  libTab: 'history', setOpen: 'Look', iptvSrc: 'samples',
   url: '',
   detected: [],
   notice: null,
@@ -986,6 +986,35 @@ async function browse(raw) {
   render();
 }
 
+/* ---------- IPTV sources ----------
+   Category and country lists come from iptv-org (github.com/iptv-org/iptv), a public directory of free channels.
+   Most are HLS: the Android app relays them to car screens as MPEG-TS. Some channels are offline or region-locked. */
+const IPTV_CATS = [['samples', 'Samples'], ['news', 'News'], ['movies', 'Movies'], ['sports', 'Sports'], ['music', 'Music'], ['kids', 'Kids'],
+  ['documentary', 'Documentary'], ['entertainment', 'Entertainment'], ['animation', 'Animation'], ['science', 'Science'], ['travel', 'Travel'],
+  ['country', ''], ['mine', 'My playlist']];
+const TV = { text: {}, parsed: {}, loading: '', err: '' };
+const iptvUrl = src => src === 'country'
+  ? `https://iptv-org.github.io/iptv/countries/${(S.settings.region || REGION).toLowerCase()}.m3u`
+  : `https://iptv-org.github.io/iptv/categories/${src}.m3u`;
+function iptvChannels() {
+  const src = S.iptvSrc;
+  const text = src === 'samples' ? SAMPLE_M3U : src === 'mine' ? S.m3u : TV.text[src];
+  if (text == null) return null;
+  const key = src + ':' + text.length;
+  if (!TV.parsed[key]) TV.parsed[key] = parseM3U(text);
+  return TV.parsed[key];
+}
+async function loadIptv(src) {
+  if (src === 'samples' || src === 'mine' || TV.text[src] != null || TV.loading) return;
+  TV.loading = src; TV.err = ''; render();
+  try {
+    const r = await fetch(iptvUrl(src));
+    if (!r.ok) throw new Error();
+    TV.text[src] = await r.text();
+  } catch { TV.err = 'Couldn’t load this list. Check your connection and try again.'; }
+  TV.loading = ''; if (S.view === 'iptv') render();
+}
+
 /* ---------- M3U ---------- */
 function parseM3U(text) {
   const out = []; let cur = null;
@@ -993,7 +1022,7 @@ function parseM3U(text) {
     l = l.trim(); if (!l) return;
     if (l.startsWith('#EXTINF')) {
       const attr = k => (l.match(new RegExp(k + '="([^"]*)"')) || [])[1] || '';
-      cur = { title: l.slice(l.lastIndexOf(',') + 1).trim() || 'Channel', group: attr('group-title') || 'Other', logo: attr('tvg-logo') };
+      cur = { title: l.slice(l.lastIndexOf(',') + 1).trim() || 'Channel', group: (attr('group-title') || 'Other').split(';')[0].trim() || 'Other', logo: attr('tvg-logo') };
     } else if (!l.startsWith('#')) {
       if (ytParse(l)) l = ytUrl(ytParse(l));
       out.push({ id: uid(), ...(cur || { title: l.split('/').pop(), group: 'Other' }), url: l, live: fmtOf(l) === 'HLS' || fmtOf(l) === 'DASH', res: 'Live', size: '—', duration: 0 });
@@ -1106,7 +1135,10 @@ addEventListener('popstate', e => { S.view = e.state?.sb || 'home'; depth = S.vi
 const main = $('#main');
 document.addEventListener('scroll', () => placeYT(), { passive: true, capture: true });
 const softBg = t => { const h = hue(t); return `background:linear-gradient(135deg,hsla(${h},45%,62%,.3),hsla(${(h + 40) % 360},40%,50%,.16))`; };
+const cssUrl = u => /^https?:\/\//i.test(u) ? u.replace(/["'()\\\s<>]/g, c => encodeURIComponent(c)) : '';
 function thumb(m) {
+  const logo = m.logo && cssUrl(m.logo);
+  if (logo) return `<div class="thumb" style="background:#fff url('${esc(logo)}') center/72% no-repeat"></div>`;
   const y = ytParse(m.url);
   return y && y.id
     ? `<div class="thumb" style="background-image:url(https://i.ytimg.com/vi/${y.id}/mqdefault.jpg)"></div>`
@@ -1268,18 +1300,28 @@ const views = {
   },
 
   iptv() {
-    const ch = parseM3U(S.m3u);
-    const groups = ['All', ...new Set(ch.map(c => c.group))];
+    const src = S.iptvSrc, ch = iptvChannels();
+    if (!ch) loadIptv(src);
+    const list = ch || [];
+    const groups = ['All', ...new Set(list.map(c => c.group))];
+    if (!groups.includes(S.group)) S.group = 'All';
     const q = S.chSearch.toLowerCase();
-    const shown = ch.filter(c => (S.group === 'All' || c.group === S.group) && (!q || c.title.toLowerCase().includes(q)));
-    views._ch = ch;
-    return `<div class="field">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="Search ${ch.length} channels" aria-label="Search channels"></div>
-      <div class="chips">${groups.map(g => `<button class="chip" data-group="${esc(g)}" aria-pressed="${g === S.group}">${esc(g)}</button>`).join('')}</div>
-      <section class="panel"><div data-list="iptv">${shown.map(c => `<button class="row" data-ch="${c.id}" style="width:100%;text-align:left">${thumb(c)}<div class="meta"><div class="t">${esc(c.title)}</div><div class="s"><span>${esc(c.group)}</span><span>${fmtOf(c.url)}</span></div></div><span class="round sm acc">${icon('play')}</span></button>`).join('') || '<div class="empty">No channels match.</div>'}</div>
-        <details class="more"><summary><span class="label">Playlist</span></summary><div class="body">
+    const match = list.filter(c => (S.group === 'All' || c.group === S.group) && (!q || c.title.toLowerCase().includes(q)));
+    const shown = match.slice(0, 120);
+    views._ch = list;
+    const label = ([k, l]) => k === 'country' ? countryName(S.settings.region || REGION) : l;
+    return `<div class="chips">${IPTV_CATS.map(c => `<button class="chip" data-src="${c[0]}" aria-pressed="${c[0] === src}">${esc(label(c))}</button>`).join('')}</div>
+      <div class="field">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="Search ${list.length} channels" aria-label="Search channels"></div>
+      ${groups.length > 2 && groups.length < 40 ? `<div class="chips">${groups.map(g => `<button class="chip" data-group="${esc(g)}" aria-pressed="${g === S.group}">${esc(g)}</button>`).join('')}</div>` : ''}
+      ${TV.err && !ch ? `<div class="note warn">${esc(TV.err)}<div class="acts"><button class="btn sm" data-act="iptvRetry">Try again</button></div></div>` : ''}
+      <section class="panel"><div data-list="iptv">${!ch ? (TV.loading ? '<div class="empty"><i class="spin" style="display:inline-block;vertical-align:middle"></i> Loading channels…</div>' : '')
+        : shown.map(c => `<button class="row" data-ch="${c.id}" style="width:100%;text-align:left">${thumb(c)}<div class="meta"><div class="t">${esc(c.title)}</div><div class="s"><span>${esc(c.group)}</span><span>${fmtOf(c.url)}</span></div></div><span class="round sm acc">${icon('play')}</span></button>`).join('') || '<div class="empty">No channels match.</div>'}
+        ${match.length > shown.length ? `<div class="empty">Showing ${shown.length} of ${match.length}. Search to find more.</div>` : ''}</div>
+        ${src === 'mine' ? `<details class="more"><summary><span class="label">Edit playlist</span></summary><div class="body">
           <textarea id="m3uText" aria-label="M3U playlist">${esc(S.m3u)}</textarea>
           <div class="pills" style="justify-content:flex-start"><label class="btn sm" for="m3uFile">${icon('upload')}Open file</label><input id="m3uFile" type="file" accept=".m3u,.m3u8,text/plain" hidden>
-            <button class="btn sm" data-act="m3uSample">Sample</button><button class="btn sm acc" data-act="m3uApply">Load</button></div></div></details></section>`;
+            <button class="btn sm" data-act="m3uSample">Sample</button><button class="btn sm acc" data-act="m3uApply">Load</button></div></div></details>` : ''}
+        ${src !== 'samples' && src !== 'mine' ? '<div class="empty" style="font-size:12px">Channels from iptv-org. Some may be offline or blocked in your region.</div>' : ''}</section>`;
   },
 
   today() {
@@ -1317,23 +1359,23 @@ const views = {
     const sw = (id, on) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><i></i></label>`;
     const sel = (id, vals, cur) => `<select id="${id}">${vals.map(v => `<option ${String(v) === String(cur) ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
     const txt = (id, val, ph, type = 'text') => `<div class="field"><input id="${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"></div>`;
-    return `<section class="panel"><div class="panel-t"><span class="label">Look</span></div>
+    return `<details class="panel more" data-set="Look" ${S.setOpen === 'Look' ? 'open' : ''}><summary><span class="label">Look</span></summary>
         <div class="set"><span>Theme</span>${sel('s-theme', ['Light', 'Dark'], document.documentElement.dataset.theme === 'dark' ? 'Dark' : 'Light')}</div>
-        <div class="set"><span>Home emblem</span>${sel('s-emblem', ['Nissan', 'Ring'], st.emblem === 'ring' ? 'Ring' : 'Nissan')}</div></section>
-      <section class="panel"><div class="panel-t"><span class="label">Playback</span></div>
+        <div class="set"><span>Home emblem</span>${sel('s-emblem', ['Nissan', 'Ring'], st.emblem === 'ring' ? 'Ring' : 'Nissan')}</div></details>
+      <details class="panel more" data-set="Playback" ${S.setOpen === 'Playback' ? 'open' : ''}><summary><span class="label">Playback</span></summary>
         <div class="set"><span>Autoplay queue</span>${sw('s-autoplay', st.autoplay)}</div>
         <div class="set"><span>Resume where I stopped</span>${sw('s-resume', st.resume)}</div>
         <div class="set"><span>Skip</span>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
-        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></section>
-      <section class="panel" id="geminiSettings"><div class="panel-t"><span class="label">Today</span></div>
+        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></details>
+      <details class="panel more" data-set="Today" id="geminiSettings" ${S.setOpen === 'Today' ? 'open' : ''}><summary><span class="label">Today</span></summary>
         <div class="set"><span>Gemini key<span class="sub">Free at aistudio.google.com/apikey. Stays on this device.</span></span>${txt('s-geminiKey', st.geminiKey, GM.server ? 'Server key in use' : 'AIza…', 'password')}</div>
         <div class="set"><span>Model</span>${txt('s-geminiModel', st.geminiModel, 'gemini-2.5-flash')}</div>
         <div class="set"><span>News country</span>${txt('s-region', st.region, REGION)}</div>
-        <div class="set"><span>Temperature</span>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div></section>
-      <section class="panel"><div class="panel-t"><span class="label">Screens</span></div>
+        <div class="set"><span>Temperature</span>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div></details>
+      <details class="panel more" data-set="Screens" ${S.setOpen === 'Screens' ? 'open' : ''}><summary><span class="label">Screens</span></summary>
         <div class="set"><span>Suggest VLC for MKV, AVI…</span>${sw('s-vlcFallback', st.vlcFallback)}</div>
         <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div>
-        <div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div></section>
+        <div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div></details>
       <div class="label" style="text-align:center">StreamBeam${N.on ? ' · App' : ''}</div>`;
   }
 };
@@ -1540,7 +1582,7 @@ function findItem(row) {
 const RATES = [1, 1.25, 1.5, 2, .5, .75];
 
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-ask],[data-copyask]');
+  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-ask],[data-copyask]');
   if (!b || scrim.contains(b)) return;
   if (b.dataset.go) return go(b.dataset.go);
   if (b.dataset.ask) return ask(b.dataset.ask);
@@ -1552,6 +1594,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
   if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(c, { from: 0 }); }
   if (b.dataset.group) { S.group = b.dataset.group; return render(); }
+  if (b.dataset.src) { S.iptvSrc = b.dataset.src; S.group = 'All'; S.chSearch = ''; TV.err = ''; render(); $('.scroll') && ($('.scroll').scrollTop = 0); return; }
   const act = b.dataset.act;
   const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
   switch (act) {
@@ -1577,7 +1620,7 @@ document.addEventListener('click', async e => {
     case 'mute': P.muted = !P.muted; video.muted = P.muted; if (ytOn()) P.muted ? Y.player.mute() : Y.player.unMute(); extCmd('volume', P.muted ? 0 : P.vol); render(); break;
     case 'vlc': openVlcSheet(ctx.item || P.item); break;
     case 'openToday': go('today'); break;
-    case 'geminiSetup': go('settings'); $('#s-geminiKey')?.focus(); break;
+    case 'geminiSetup': S.setOpen = 'Today'; go('settings'); $('#s-geminiKey')?.focus(); break;
     case 'locate': locate(); break;
     case 'speak': speak(); break;
     case 'copyAnswer': try { await navigator.clipboard.writeText(GM.answer.text); toast('Copied'); } catch { toast('Copy blocked'); } break;
@@ -1622,9 +1665,18 @@ document.addEventListener('click', async e => {
     case 'unbookmark': S.bookmarks.splice(ctx.idx, 1); save(); render(); break;
     case 'openBm': go('browser'); browse(ctx.item.url); break;
     case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`${parseM3U(S.m3u).length} channels`); render(); break;
+    case 'iptvRetry': TV.err = ''; loadIptv(S.iptvSrc); break;
     case 'm3uSample': S.m3u = SAMPLE_M3U; S.group = 'All'; save(); render(); break;
   }
 });
+
+/* Settings groups: opening one closes the others, and the open one survives re-renders */
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d.matches || !d.matches('details[data-set]') || !d.open) return;
+  S.setOpen = d.dataset.set;
+  document.querySelectorAll('details[data-set]').forEach(x => { if (x !== d) x.open = false; });
+}, true);
 
 document.addEventListener('submit', e => {
   if (e.target.id === 'urlForm') { e.preventDefault(); browse($('#urlInput').value); }

@@ -61,6 +61,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private int mirrorId = -1;
     private String mirrorDevice;
     private boolean mirrorStoppedByPage;
+    private String relayUrl;
 
     Bridge(Activity activity) {
         this.activity = activity;
@@ -114,6 +115,19 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 Media media = new Media(a.getString("url"), a.optString("title", "Video"), a.optString("mime", "video/mp4"), a.optDouble("start", 0), a.optBoolean("live"));
                 if (!cast.has(device) && !dlna.has(device)) {
                     done.fail("That screen isn’t available. Search again.");
+                } else if (dlna.has(device) && isHls(media)) {
+                    // Many car units can't play HLS: relay the channel to them as one continuous MPEG-TS stream.
+                    String host = dlna.hostOf(device);
+                    work.execute(() -> {
+                        try {
+                            if (relayUrl != null) files.remove(relayUrl);
+                            relayUrl = files.addLive(new HlsRelay(media.url), "channel.ts", "video/mp2t");
+                            Media relayed = new Media(files.publicUrl(relayUrl, host), media.title, "video/mp2t", 0, true);
+                            main.post(() -> startPlay(device, relayed, done));
+                        } catch (IOException e) {
+                            main.post(() -> done.fail("Couldn’t start the channel."));
+                        }
+                    });
                 } else if (files.owns(media.url)) {
                     // A file from this phone: give the screen this phone's address on the network that reaches it.
                     String host = cast.has(device) ? cast.hostOf(device) : dlna.hostOf(device);
@@ -164,6 +178,11 @@ class Bridge implements WebViewCompat.WebMessageListener {
             default:
                 done.fail("Unknown command: " + cmd);
         }
+    }
+
+    private static boolean isHls(Media m) {
+        String path = m.url.split("\\?")[0].toLowerCase(java.util.Locale.US);
+        return m.mime.toLowerCase(java.util.Locale.US).contains("mpegurl") || path.endsWith(".m3u8");
     }
 
     private void startPlay(String device, Media media, Done done) {
