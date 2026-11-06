@@ -79,6 +79,7 @@ public class MirrorService extends Service {
                 ScreenEncoder e = encoder;
                 if (e != null) e.requestKeyFrame();
             });
+            stream.padTo(5_000_000); // steady 5 Mbit/s: picture and sound, topped up with filler
             TsMuxer mux = new TsMuxer();
             if (intent.getBooleanExtra(EXTRA_SOUND, false) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 AudioCapture a = new AudioCapture(mux, stream);

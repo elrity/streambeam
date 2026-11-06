@@ -17,7 +17,7 @@ class LiveStream implements LocalServer.Live {
     private static final byte[] END = new byte[0];
 
     private final class Client {
-        final BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(90); // ~3 s at 30 fps
+        final BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(240); // ~1.5 s of picture, sound and filler
         boolean started;
 
         synchronized void offer(byte[] chunk, boolean key) {
@@ -36,6 +36,8 @@ class LiveStream implements LocalServer.Live {
     private final List<Client> clients = new CopyOnWriteArrayList<>();
     private final Runnable onClient;
     private volatile boolean closed;
+    private final java.util.concurrent.atomic.AtomicLong sent = new java.util.concurrent.atomic.AtomicLong();
+    private Thread padder;
 
     /** {@code onClient} asks the encoder for a key frame. */
     LiveStream(Runnable onClient) {
@@ -43,7 +45,47 @@ class LiveStream implements LocalServer.Live {
     }
 
     void publish(byte[] chunk, boolean key) {
+        sent.addAndGet(chunk.length);
         for (Client c : clients) c.offer(chunk, key);
+    }
+
+    /*
+     * Keeps the stream at a steady rate with MPEG-TS null packets (PID 0x1FFF), which every player discards.
+     * A still screen such as a map makes only a trickle of data, and car players tuned for films keep
+     * pausing to fill their buffer when data trickles in; each pause stays as delay. With filler the stream
+     * looks like a busy video to them.
+     */
+    void padTo(int bitsPerSecond) {
+        padder = new Thread(() -> {
+            final int perPacket = 188;
+            byte[] nul = new byte[perPacket];
+            java.util.Arrays.fill(nul, (byte) 0xFF);
+            nul[0] = 0x47;
+            nul[1] = 0x1F;
+            nul[2] = (byte) 0xFF;
+            nul[3] = 0x10;
+            long start = System.nanoTime(), base = sent.get();
+            while (!closed) {
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                long due = (System.nanoTime() - start) / 1000 * (bitsPerSecond / 8) / 1_000_000;
+                long missing = due - (sent.get() - base);
+                if (missing < perPacket) continue;
+                int packets = (int) Math.min(missing / perPacket, 200); // at most ~37 KB at once
+                byte[] fill = new byte[packets * perPacket];
+                for (int i = 0; i < packets; i++) System.arraycopy(nul, 0, fill, i * perPacket, perPacket);
+                publish(fill, false);
+                if (missing > bitsPerSecond / 8) { // far behind (just started, or a pause): don't burst to catch up
+                    start = System.nanoTime();
+                    base = sent.get();
+                }
+            }
+        }, "StreamBeam filler");
+        padder.setDaemon(true);
+        padder.start();
     }
 
     int clients() {
@@ -72,6 +114,7 @@ class LiveStream implements LocalServer.Live {
 
     void close() {
         closed = true;
+        if (padder != null) padder.interrupt();
         for (Client c : clients) {
             c.queue.clear();
             c.queue.offer(END);

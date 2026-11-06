@@ -260,6 +260,7 @@ kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-
 .idle .idate { font-size: 15px; color: #8a8c92; }
 .idle .inow { margin-top: 18px; font-size: 15px; color: #c9cacd; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .idle .ihint { margin-top: 26px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #55575c; }
+select.btn { appearance: none; -webkit-appearance: none; border: 0; font: inherit; font-size: 14px; color: var(--fg); text-align: center; }
 .toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); padding: 12px 20px; border-radius: 14px; background: var(--sheet); box-shadow: 0 8px 24px var(--lo); font-size: 14px; text-align: center; }
 
 /* Landscape and short screens: side by side, tighter */
@@ -473,7 +474,7 @@ const S = {
   m3u: store.get('m3u', SAMPLE_M3U),
   group: 'All', chSearch: '',
   local: [],
-  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, mirrorMute: true, hotspot: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
+  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, mirrorMute: true, hotspot: true, autoCatch: 0, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
   scanning: false
 };
 /* Devices saved by older versions (fixed demo ids) or demo screens after demo mode is off */
@@ -1455,7 +1456,8 @@ const views = {
           <span class="label ${st === 'live' ? '' : 'acc'}">${st === 'live' ? '<span id="nmTime">0:00</span>' : st === 'starting' ? 'Starting' : 'Start'}</span></button>
         <div style="text-align:center"><div class="np-title">${st === 'live' ? 'On ' + esc(d?.name || 'the screen') : dlna ? 'Mirror to ' + esc(d.name) : 'Choose the car screen'}</div>
           <div class="label" style="margin-top:6px">${st === 'live' ? 'Live on the car' : dlna ? 'Your screen as a live video' : 'Tap Start to pick it'}</div>
-          ${st === 'live' ? `<div class="pills" style="margin-top:12px"><button class="btn sm" data-act="mirrorResync">${icon('refresh')}Catch up</button></div>` : ''}</div>
+          ${st === 'live' ? `<div class="pills" style="margin-top:12px"><button class="btn sm" data-act="mirrorResync">${icon('refresh')}Catch up</button>
+            <select id="s-autoCatch" class="btn sm" aria-label="Catch up by itself">${[[0, 'Auto: off'], [5, 'Auto: every 5 min'], [10, 'Auto: every 10 min']].map(([v, t]) => `<option value="${v}" ${+S.settings.autoCatch === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>` : ''}</div>
         <div class="note">Sound plays in the car with the picture. If the car falls behind, tap Catch up. Apps that block screen recording, such as Netflix or banking apps, show black.</div>
         <section class="panel"><details class="more"><summary><span class="label">Chromecast or Miracast TV</span></summary><div class="body">
           <div class="muted" style="font-size:14px">Use Android’s own screen cast for those.</div>
@@ -1855,7 +1857,7 @@ document.addEventListener('click', async e => {
       if (!d || !S.device.startsWith('n:dlna:')) { toast('Pick the car screen first'); openDevices(); break; }
       if (P.item) stop();
       N.mirror = { state: 'starting', at: 0 }; render();
-      ncall('mirrorStart', { deviceId: S.device.slice(2), sound: S.settings.mirrorSound, mute: S.settings.mirrorMute })
+      ncall('mirrorStart', { deviceId: S.device.slice(2), sound: S.settings.mirrorSound, mute: S.settings.mirrorMute, catchUp: +S.settings.autoCatch || 0 })
         .then(() => { N.mirror = { state: 'live', at: Date.now() }; toast('Mirroring to ' + d.name); render(); })
         .catch(err => { N.mirror = { state: '', at: 0 }; toast(err.message); render(); });
       break;
@@ -1950,6 +1952,7 @@ document.addEventListener('change', async e => {
     if (k === 'theme') { setTheme(t.value === 'Dark' ? 'dark' : 'light'); return; }
     if (k === 'emblem') S.settings.emblem = t.value.toLowerCase();
     if (k === 'demo' && !t.checked && S.device.startsWith('demo-')) S.device = '';
+    if (k === 'autoCatch') { S.settings.autoCatch = +t.value; save(); if (N.mirror.state === 'live') ncall('mirrorAuto', { minutes: +t.value }).catch(() => {}); toast(+t.value ? `Catching up every ${t.value} minutes` : 'Auto catch up off'); return; }
     save(); toast('Saved');
   }
   if (t.id === 'fileIn') addFiles(t.files);

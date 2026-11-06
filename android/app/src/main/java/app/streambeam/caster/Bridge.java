@@ -61,6 +61,17 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private int mirrorId = -1;
     private String mirrorDevice;
     private Media mirrorMedia;
+    private int catchUpMinutes;
+    /** Optional automatic Catch up while mirroring (runs here, so it keeps going while another app is open). */
+    private final Runnable autoCatchUp = new Runnable() {
+        @Override
+        public void run() {
+            if (MirrorService.isRunning() && mirrorMedia != null && catchUpMinutes > 0) {
+                Bridge.this.dlna.play(mirrorDevice, mirrorMedia, quiet());
+                Bridge.this.main.postDelayed(this, catchUpMinutes * 60_000L);
+            }
+        }
+    };
     private boolean mirrorStoppedByPage;
     private String relayUrl;
     private boolean mirrorSound, mirrorMute;
@@ -147,6 +158,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 break;
             case "mirrorStart":
                 mirrorMute = a.optBoolean("mute", true);
+                catchUpMinutes = a.optInt("catchUp", 0);
                 startMirror(id, a.getString("deviceId"), a.optBoolean("sound", true));
                 break;
             case "mirrorResync":
@@ -154,6 +166,11 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 // Reopening the live video makes it start again from the newest picture.
                 if (!MirrorService.isRunning() || mirrorMedia == null) done.fail("Mirroring isn’t on.");
                 else dlna.play(mirrorDevice, mirrorMedia, done);
+                break;
+            case "mirrorAuto":
+                catchUpMinutes = a.optInt("minutes", 0);
+                scheduleCatchUp();
+                done.ok();
                 break;
             case "mirrorStop":
                 mirrorStoppedByPage = MirrorService.isRunning();
@@ -291,6 +308,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
                             answered[0] = true;
                             reply(id, true, null);
                             mirrorEvent("live", null);
+                            scheduleCatchUp();
                         }
 
                         @Override
@@ -323,6 +341,11 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 .putExtra(MirrorService.EXTRA_MUTE, mirrorMute);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(service);
         else activity.startService(service);
+    }
+
+    private void scheduleCatchUp() {
+        main.removeCallbacks(autoCatchUp);
+        if (catchUpMinutes > 0 && MirrorService.isRunning()) main.postDelayed(autoCatchUp, catchUpMinutes * 60_000L);
     }
 
     private void stopMirror() {

@@ -61,7 +61,7 @@ class ScreenEncoder {
         f.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
         // Keep sending frames while the screen is still, so the screen's player never starves.
-        f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000);
+        f.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 33_333); // a still screen still sends 30 frames a second
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) f.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
         f.setInteger("priority", 0); // real-time: encode each frame as soon as it is drawn
         f.setInteger("latency", 1); // hand out every frame at once instead of holding a few back
