@@ -38,12 +38,19 @@ class LocalServer {
         InputStream open(long offset) throws IOException;
     }
 
+    /** A never-ending stream (the phone screen) written to one screen's connection until it closes. */
+    interface Live {
+        void stream(OutputStream out) throws IOException;
+    }
+
     static final class Entry {
         final Source source;
+        final Live live;
         final String name, mime;
 
-        Entry(Source source, String name, String mime) {
+        Entry(Source source, Live live, String name, String mime) {
             this.source = source;
+            this.live = live;
             this.name = name;
             this.mime = mime;
         }
@@ -77,12 +84,27 @@ class LocalServer {
 
     /** Registers a file and returns its address on this phone (127.0.0.1, for playing here). */
     String add(Source source, String name, String mime) throws IOException {
+        return register(new Entry(source, null, name, mime));
+    }
+
+    /** Registers a live stream; returns its 127.0.0.1 address. */
+    String addLive(Live live, String name, String mime) throws IOException {
+        return register(new Entry(null, live, name, mime));
+    }
+
+    /** Stops serving an address handed out earlier. */
+    void remove(String url) {
+        String[] path = URI.create(url).getPath().split("/");
+        if (path.length >= 3) files.remove(path[2]);
+    }
+
+    private String register(Entry entry) throws IOException {
         byte[] b = new byte[16];
         random.nextBytes(b);
         StringBuilder token = new StringBuilder();
         for (byte x : b) token.append(String.format(Locale.US, "%02x", x));
-        files.put(token.toString(), new Entry(source, name, mime));
-        String safe = name.replaceAll("[^A-Za-z0-9._-]", "_");
+        files.put(token.toString(), entry);
+        String safe = entry.name.replaceAll("[^A-Za-z0-9._-]", "_");
         return "http://127.0.0.1:" + port() + "/f/" + token + "/" + safe;
     }
 
@@ -150,6 +172,19 @@ class LocalServer {
             Entry e = path.length >= 3 && path[1].equals("f") ? files.get(path[2]) : null;
             if (e == null) {
                 status(out, "404 Not Found");
+                return;
+            }
+            if (e.live != null) {
+                // Live: no length, no seeking; the body runs until the stream ends or the screen hangs up.
+                out.write(("HTTP/1.1 200 OK\r\nContent-Type: " + e.mime + "\r\nAccept-Ranges: none\r\nCache-Control: no-cache\r\n"
+                        + "transferMode.dlna.org: Streaming\r\n"
+                        + "contentFeatures.dlna.org: DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000\r\n"
+                        + "Connection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+                out.flush();
+                if (parts[0].equals("GET")) {
+                    c.setTcpNoDelay(true);
+                    e.live.stream(out);
+                }
                 return;
             }
             long size = e.source.size(), start = 0, end = size - 1;

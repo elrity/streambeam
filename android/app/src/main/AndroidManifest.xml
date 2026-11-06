@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- SSDP search for DLNA screens -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Mirror to car screen: screen capture runs in a foreground service with a notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Only asked when you tap Locate on the Today screen -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
@@ -39,5 +43,9 @@
                 <data android:scheme="https" android:host="${hostName}" android:pathPrefix="${pathPrefix}" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".MirrorService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
     </application>
 </manifest>

@@ -385,6 +385,7 @@ class Dlna {
         // Standard DLNA flags (streaming, seekable by byte range). Many car and TV receivers want them before showing video.
         String lower = media.mime.toLowerCase(Locale.US);
         String features = lower.contains("mpegurl") || lower.contains("dash") ? "*"
+                : media.live ? "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000" // live: no seeking
                 : "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000";
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
                 + " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"

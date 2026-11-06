@@ -108,6 +108,10 @@ public class MainActivity extends Activity {
     @Override
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int request, int result, Intent data) {
+        if (request == Bridge.MIRROR_REQUEST) {
+            bridge.onMirrorPermission(result, data);
+            return;
+        }
         if (request == Bridge.PICK_REQUEST) {
             bridge.onFilesPicked(result, data);
             return;

@@ -1,11 +1,14 @@
 package app.streambeam.caster;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.media.projection.MediaProjectionManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -42,6 +45,7 @@ import java.util.concurrent.Executors;
 class Bridge implements WebViewCompat.WebMessageListener {
     private static final long SCAN_MS = 9000;
     static final int PICK_REQUEST = 43;
+    static final int MIRROR_REQUEST = 44;
 
     private final Activity activity;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -54,6 +58,9 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private final LocalServer files = new LocalServer();
     private final ExecutorService work = Executors.newSingleThreadExecutor();
     private int pickId = -1;
+    private int mirrorId = -1;
+    private String mirrorDevice;
+    private boolean mirrorStoppedByPage;
 
     Bridge(Activity activity) {
         this.activity = activity;
@@ -120,6 +127,14 @@ class Bridge implements WebViewCompat.WebMessageListener {
             case "pickFiles":
                 pickFiles(id);
                 break;
+            case "mirrorStart":
+                startMirror(id, a.getString("deviceId"));
+                break;
+            case "mirrorStop":
+                mirrorStoppedByPage = MirrorService.isRunning();
+                stopMirror();
+                done.ok();
+                break;
             case "pause":
             case "resume":
             case "seek":
@@ -155,6 +170,105 @@ class Bridge implements WebViewCompat.WebMessageListener {
         if (cast.has(device)) cast.play(device, media, wrap(device, done));
         else if (dlna.has(device)) dlna.play(device, media, wrap(device, done));
         else done.fail("That screen isn’t available. Search again.");
+    }
+
+    /* ---------- Mirror to a DLNA screen: the phone screen as a live MPEG-TS video ---------- */
+
+    private void startMirror(int id, String device) {
+        if (!dlna.has(device)) {
+            reply(id, false, cast.has(device) ? "For Chromecast and Google TV, use Android’s Cast option." : "That screen isn’t available. Search again.");
+            return;
+        }
+        if (MirrorService.isRunning()) MirrorService.stop(activity);
+        mirrorId = id;
+        mirrorDevice = device;
+        if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 45); // for the Stop notification
+        }
+        MediaProjectionManager mpm = (MediaProjectionManager) activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE);
+        activity.startActivityForResult(mpm.createScreenCaptureIntent(), MIRROR_REQUEST);
+    }
+
+    /** Called by the activity with Android's screen-sharing consent. */
+    void onMirrorPermission(int resultCode, Intent data) {
+        int id = mirrorId;
+        mirrorId = -1;
+        String device = mirrorDevice;
+        if (id < 0) return;
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            reply(id, false, "Screen sharing wasn’t allowed.");
+            return;
+        }
+        final boolean[] answered = {false};
+        MirrorService.server = files;
+        MirrorService.listener = new MirrorService.Listener() {
+            @Override
+            public void onLive(String localUrl) {
+                String host = dlna.hostOf(device);
+                work.execute(() -> {
+                    Media screen = new Media(files.publicUrl(localUrl, host), "Phone screen", "video/mp2t", 0, true);
+                    main.post(() -> dlna.play(device, screen, new Done() {
+                        @Override
+                        public void ok() {
+                            active = device;
+                            answered[0] = true;
+                            reply(id, true, null);
+                            mirrorEvent("live", null);
+                        }
+
+                        @Override
+                        public void fail(String error) {
+                            answered[0] = true;
+                            reply(id, false, error);
+                            main.post(() -> MirrorService.stop(activity));
+                        }
+                    }));
+                });
+            }
+
+            @Override
+            public void onStopped(String error) {
+                if (!answered[0]) {
+                    answered[0] = true;
+                    reply(id, false, error != null ? error : "Screen sharing stopped.");
+                }
+                // Stopped from the notification or by Android: stop the screen too. When the page stopped it,
+                // the page decides (it may be about to play a video there).
+                if (!mirrorStoppedByPage && device != null && device.equals(active)) dlna.command("stop", 0, quiet());
+                mirrorStoppedByPage = false;
+                mirrorEvent("stopped", error);
+            }
+        };
+        Intent service = new Intent(activity, MirrorService.class)
+                .putExtra(MirrorService.EXTRA_CODE, resultCode)
+                .putExtra(MirrorService.EXTRA_DATA, data);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(service);
+        else activity.startService(service);
+    }
+
+    private void stopMirror() {
+        if (MirrorService.isRunning()) MirrorService.stop(activity);
+    }
+
+    private void mirrorEvent(String state, String error) {
+        try {
+            JSONObject o = new JSONObject().put("event", "mirror").put("state", state).put("deviceId", mirrorDevice);
+            if (error != null) o.put("error", error);
+            send(o);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private static Done quiet() {
+        return new Done() {
+            @Override
+            public void ok() {
+            }
+
+            @Override
+            public void fail(String error) {
+            }
+        };
     }
 
     /* ---------- Files from this phone ---------- */
@@ -355,6 +469,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
     }
 
     void release() {
+        stopMirror();
         main.removeCallbacksAndMessages(null);
         files.release();
         work.shutdownNow();

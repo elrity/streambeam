@@ -663,6 +663,7 @@ video.addEventListener('ended', () => onEnded());
 
 function playItem(item, opts = {}) {
   if (M.stream) stopMirror();
+  if (N.mirror.state) { N.mirror = { state: '', at: 0 }; ncall('mirrorStop').catch(() => {}); }
   const it = { ...item, id: item.id || uid() };
   const resume = S.settings.resume ? (S.history.find(h => h.url === it.url)?.pos || 0) : 0;
   load(it, opts.from ?? (resume > 5 && resume < (it.duration || Infinity) - 10 ? resume : 0));
@@ -1007,7 +1008,7 @@ function parseM3U(text) {
    It finds real screens on the Wi-Fi (Google Cast and DLNA/UPnP renderers over SSDP) and casts to them.
    In a plain browser it is absent: no network search is possible there, so none is faked. */
 const NB = window.StreamBeamNative;
-const N = { on: !!NB, devices: [], scanning: false, seq: 0, wait: new Map() };
+const N = { on: !!NB, devices: [], scanning: false, seq: 0, wait: new Map(), mirror: { state: '', at: 0 } };
 let sheetKind = '';
 if (NB) {
   NB.onmessage = e => {
@@ -1019,6 +1020,10 @@ if (NB) {
       if (S.view === 'home') updateConn();
     } else if (m.event === 'status') onNativeStatus(m);
     else if (m.event === 'session') onNativeSession(m);
+    else if (m.event === 'mirror') {
+      if (m.state === 'stopped' && N.mirror.state) { N.mirror = { state: '', at: 0 }; if (m.error) toast(m.error); render(); }
+      else if (m.state === 'live' && N.mirror.state !== 'live') { N.mirror = { state: 'live', at: Date.now() }; render(); }
+    }
   };
 }
 function ncall(cmd, args = {}) {
@@ -1026,7 +1031,7 @@ function ncall(cmd, args = {}) {
   return new Promise((res, rej) => {
     const id = ++N.seq; N.wait.set(id, { res, rej });
     NB.postMessage(JSON.stringify({ id, cmd, args }));
-    setTimeout(() => { if (N.wait.delete(id)) rej(new Error('The screen didn’t answer.')); }, cmd === 'pickFiles' ? 600000 : 25000);
+    setTimeout(() => { if (N.wait.delete(id)) rej(new Error('The screen didn’t answer.')); }, cmd === 'pickFiles' ? 600000 : cmd === 'mirrorStart' ? 120000 : 25000);
   });
 }
 const nativeOn = () => P.ext === 'native';
@@ -1156,12 +1161,17 @@ function updateConn() {
   const c = $('#conn'); if (!c) return;
   const dev = curDev(), local = S.device === 'local';
   const title = dev ? dev.name : local ? 'This device' : 'Connect';
-  const sub = dev ? (dev.away ? 'Searching…' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : N.on ? 'Find a screen' : 'Choose a screen';
+  const sub = N.mirror.state === 'live' ? 'Mirroring your screen' : dev ? (dev.away ? 'Searching…' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : N.on ? 'Find a screen' : 'Choose a screen';
   c.className = 'connect' + (dev || local ? ' on' : '');
   c.innerHTML = `<span class="c-title">${esc(title)}</span><span class="c-sub">${esc(sub)}</span>`;
   const label = dev || local ? `Connected to ${title}. Change screen` : 'Connect a screen';
   c.setAttribute('aria-label', label); $('#dialBtn')?.setAttribute('aria-label', label);
 }
+setInterval(() => {
+  if (N.mirror.state !== 'live') return;
+  const t = fmt((Date.now() - N.mirror.at) / 1000);
+  [['#nmTime', t], ['#mMini', t]].forEach(([q, v]) => { const n = $(q); if (n) n.textContent = v; });
+}, 1000);
 setInterval(() => { const c = $('#clock'); if (c) c.textContent = clockStr(); const e = $('#eTime'); if (e) e.textContent = clockStr(); }, 10000);
 
 function sectionView(v) {
@@ -1216,8 +1226,18 @@ const views = {
   },
 
   mirror() {
-    if (N.on) return `<button class="big-go" data-act="nativeMirror">${icon('mirror')}<span class="label acc">Start</span></button>
-      <div class="note">Android sends your whole screen to a TV or car screen that supports screen casting (Smart View, Miracast or Google Cast). Pick it in the list that opens.</div>`;
+    if (N.on) {
+      const d = curDev(), dlna = !!d && S.device.startsWith('n:dlna:'), st = N.mirror.state;
+      return `<button class="big-go ${st === 'live' ? 'on' : ''}" data-act="${st === 'live' ? 'mirrorStop' : 'mirrorStart'}" ${st === 'starting' ? 'disabled' : ''}>
+          ${st === 'starting' ? '<i class="spin"></i>' : icon(st === 'live' ? 'stop' : 'mirror')}
+          <span class="label ${st === 'live' ? '' : 'acc'}">${st === 'live' ? '<span id="nmTime">0:00</span>' : st === 'starting' ? 'Starting' : 'Start'}</span></button>
+        <div style="text-align:center"><div class="np-title">${st === 'live' ? 'On ' + esc(d?.name || 'the screen') : dlna ? 'Mirror to ' + esc(d.name) : 'Choose the car screen'}</div>
+          <div class="label" style="margin-top:6px">${st === 'live' ? 'Live · about 1–4 s behind' : dlna ? 'Your screen as a live video' : 'Tap Start to pick it'}</div></div>
+        <div class="note">Sound stays on the phone or Bluetooth. Apps that block screen recording, such as Netflix or banking apps, show black.</div>
+        <section class="panel"><details class="more"><summary><span class="label">Chromecast or Miracast TV</span></summary><div class="body">
+          <div class="muted" style="font-size:14px">Use Android’s own screen cast for those.</div>
+          <div class="pills" style="justify-content:flex-start"><button class="btn sm" data-act="nativeMirror">${icon('cast')}Android screen cast</button></div></div></details></section>`;
+    }
     const live = !!M.stream;
     const sel = (id, label, opts, cur) => `<div class="set"><span>${label}</span><select id="${id}" ${live ? 'disabled' : ''}>${opts.map(([v, t]) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
     return `<div class="screen" id="mscreen"></div>
@@ -1404,8 +1424,14 @@ function tick(full) {
 function renderMini() {
   const m = $('#mini');
   const it = P.item;
-  m.hidden = S.view === 'player' || S.view === 'mirror' || (!it && !M.stream);
+  const nm = N.mirror.state === 'live';
+  m.hidden = S.view === 'player' || S.view === 'mirror' || (!it && !M.stream && !nm);
   if (m.hidden) return;
+  if (nm) {
+    m.innerHTML = `<span class="round sm" style="color:var(--warm)">${icon('mirror')}</span><div class="meta" data-act="openMirror"><div class="t">Mirroring to ${esc(devName())}</div><div class="s"><span id="mMini">${fmt((Date.now() - N.mirror.at) / 1000)}</span></div></div>
+      <button class="round sm" data-act="mirrorStop" aria-label="Stop mirroring">${icon('stop')}</button>`;
+    return;
+  }
   if (M.stream) {
     m.innerHTML = `<span class="round sm" style="color:var(--warm)">${icon('mirror')}</span><div class="meta" data-act="openMirror"><div class="t">Mirroring</div><div class="s"><span id="mMini">${fmt((Date.now() - M.at) / 1000)}</span></div></div>
       <button class="round sm" data-act="stopMirror" aria-label="Stop mirroring">${icon('stop')}</button>`;
@@ -1572,6 +1598,20 @@ document.addEventListener('click', async e => {
         render();
       }).catch(err => toast(err.message));
       break;
+    case 'mirrorStart': {
+      const d = curDev();
+      if (!d || !S.device.startsWith('n:dlna:')) { toast('Pick the car screen first'); openDevices(); break; }
+      if (P.item) stop();
+      N.mirror = { state: 'starting', at: 0 }; render();
+      ncall('mirrorStart', { deviceId: S.device.slice(2) })
+        .then(() => { N.mirror = { state: 'live', at: Date.now() }; toast('Mirroring to ' + d.name); render(); })
+        .catch(err => { N.mirror = { state: '', at: 0 }; toast(err.message); render(); });
+      break;
+    }
+    case 'mirrorStop':
+      N.mirror = { state: '', at: 0 };
+      ncall('mirrorStop').then(() => ncall('stop')).catch(() => {});
+      render(); break;
     case 'nativeMirror': ncall('openCastSettings').catch(err => toast(err.message)); break;
     case 'bookmark': {
       const i = S.bookmarks.findIndex(x => x.url === S.url);

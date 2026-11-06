@@ -10,7 +10,12 @@ page can't do: it **searches your Wi-Fi for screens** and casts to them.
   units, Kodi, set-top boxes. Found with an SSDP search on every Wi-Fi and
   hotspot interface, controlled with UPnP AVTransport (play, pause, seek,
   volume).
-- **Screen mirroring** opens Android's own screen-cast settings.
+- **Mirror to car screen (DLNA)**: the phone screen is captured (Android's
+  screen-recording permission, with a notification while it runs), encoded to
+  H.264 1280×720 by the hardware encoder, packed as live MPEG-TS and served by
+  the app; the screen is told to play it like any video. Expect 1–4 s delay;
+  sound stays on the phone or Bluetooth; apps that block screen recording show
+  black. For Chromecast or Miracast TVs, Mirror also opens Android's own cast.
 
 The phone and the screen must be on the same network. For a car screen, join
 the car's Wi-Fi or connect the car to the phone's hotspot. YouTube can't be
