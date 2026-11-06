@@ -144,3 +144,10 @@ reinstalling; a factory reset changes it.
 With *Phone sound in mirroring* on, the sound goes to the car inside the video. *Mute the phone while
 mirroring* mutes the phone's own media volume for the session (restored when mirroring stops); the capture
 is unaffected. If a phone ever captures only silence while muted, the app turns the phone's sound back on.
+
+## Mirroring delay
+
+The car's player waits whenever it runs short of data and never skips ahead, so every wait stays as delay.
+The stream avoids waits: sound runs without gaps (silence is sent while nothing plays) on the same clock
+as the picture, and the encoder hands out each frame at once. If the car still drifts behind, *Catch up*
+on the Mirror screen restarts the picture there from the newest frame.

@@ -71,20 +71,46 @@ class AudioCapture {
         thread.start();
     }
 
+    /*
+     * Audio runs on the real-time clock, without gaps. Android only delivers captured sound while an app is
+     * playing; if the stream simply paused, the car would wait for sound and keep buffering picture
+     * meanwhile, and that wait would stay as delay for the rest of the session. So any gap is filled with
+     * silence, and timestamps follow the wall clock (the same one the screen frames use).
+     */
     private void loop() {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-        long baseUs = System.nanoTime() / 1000, samples = 0; // same clock as the screen frames
+        final int frameBytes = 2 * CHANNELS, chunk = 1920 * frameBytes; // 40 ms per buffer at most
+        long baseUs = System.nanoTime() / 1000, samples = 0;
+        int in = -1;
         while (running) {
             try {
-                int in = codec.dequeueInputBuffer(10_000);
+                if (in < 0) in = codec.dequeueInputBuffer(5_000);
                 if (in >= 0) {
                     ByteBuffer buf = codec.getInputBuffer(in);
-                    int n = buf != null ? record.read(buf, Math.min(buf.capacity(), 4096)) : 0;
+                    int room = buf != null ? Math.min(buf.capacity(), chunk) : 0;
+                    int n = room > 0 ? record.read(buf, room, AudioRecord.READ_NON_BLOCKING) : 0;
+                    long nowUs = System.nanoTime() / 1000;
                     if (n > 0) {
+                        n -= n % frameBytes;
                         if (!silent(buf, n)) lastSound = System.currentTimeMillis();
+                        // Keep the sample clock on the wall clock: if sound fell more than 150 ms behind, move it
+                        // forward (never back, so timestamps only grow).
+                        long expected = baseUs + samples * 1_000_000 / RATE, real = nowUs - (n / frameBytes) * 1_000_000L / RATE;
+                        if (real - expected > 150_000) baseUs = real - samples * 1_000_000 / RATE;
                         codec.queueInputBuffer(in, 0, n, baseUs + samples * 1_000_000 / RATE, 0);
-                        samples += n / (2 * CHANNELS);
-                    } else codec.queueInputBuffer(in, 0, 0, baseUs + samples * 1_000_000 / RATE, 0);
+                        samples += n / frameBytes;
+                        in = -1;
+                    } else {
+                        long behindUs = nowUs - (baseUs + samples * 1_000_000 / RATE);
+                        if (behindUs > 60_000 && room > 0) { // nothing captured for a while: send silence up to now
+                            int fill = (int) Math.min(room / frameBytes, behindUs * RATE / 1_000_000) * frameBytes;
+                            int at = buf.position();
+                            for (int i = 0; i < fill; i++) buf.put(at + i, (byte) 0);
+                            codec.queueInputBuffer(in, 0, fill, baseUs + samples * 1_000_000 / RATE, 0);
+                            samples += fill / frameBytes;
+                            in = -1;
+                        }
+                    }
                 }
                 int out;
                 while ((out = codec.dequeueOutputBuffer(info, 0)) >= 0) {
@@ -97,7 +123,10 @@ class AudioCapture {
                     }
                     codec.releaseOutputBuffer(out, false);
                 }
+                if (in >= 0) Thread.sleep(5); // waiting for sound or for the clock
             } catch (IllegalStateException e) {
+                break;
+            } catch (InterruptedException e) {
                 break;
             }
         }

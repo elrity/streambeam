@@ -60,6 +60,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private int pickId = -1;
     private int mirrorId = -1;
     private String mirrorDevice;
+    private Media mirrorMedia;
     private boolean mirrorStoppedByPage;
     private String relayUrl;
     private boolean mirrorSound, mirrorMute;
@@ -148,6 +149,12 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 mirrorMute = a.optBoolean("mute", true);
                 startMirror(id, a.getString("deviceId"), a.optBoolean("sound", true));
                 break;
+            case "mirrorResync":
+                // The car's player only ever adds delay (it waits whenever it runs short and never skips ahead).
+                // Reopening the live video makes it start again from the newest picture.
+                if (!MirrorService.isRunning() || mirrorMedia == null) done.fail("Mirroring isn’t on.");
+                else dlna.play(mirrorDevice, mirrorMedia, done);
+                break;
             case "mirrorStop":
                 mirrorStoppedByPage = MirrorService.isRunning();
                 stopMirror();
@@ -190,6 +197,27 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 applyTheme(a.optBoolean("dark"), a.optString("top", "#D9DADE"), a.optString("bottom", "#FCFCFD"));
                 done.ok();
                 break;
+            case "screen": {
+                // Idle: dim this window to the lowest brightness (brightness isn't part of a screen capture, so
+                // the car's picture stays bright) and keep the phone awake while mirroring.
+                boolean dim = a.optBoolean("dim"), awake = a.optBoolean("awake");
+                main.post(() -> {
+                    Window w = activity.getWindow();
+                    android.view.WindowManager.LayoutParams lp = w.getAttributes();
+                    lp.screenBrightness = dim ? 0.01f : android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                    w.setAttributes(lp);
+                    if (awake) w.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    else w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                });
+                done.ok();
+                break;
+            }
+            case "hotspot": {
+                boolean on = hotspotOn(), opened = false;
+                if (!on && a.optBoolean("openIfOff", false) || a.optBoolean("open", false)) opened = openHotspotSettings();
+                send(new JSONObject().put("id", id).put("ok", true).put("result", new JSONObject().put("on", on).put("opened", opened)));
+                break;
+            }
             case "assistant":
                 if (openAssistant()) done.ok();
                 else done.fail("No assistant app was found on this phone.");
@@ -255,6 +283,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 String host = dlna.hostOf(device);
                 work.execute(() -> {
                     Media screen = new Media(files.publicUrl(localUrl, host), "Phone screen", "video/mp2t", 0, true);
+                    mirrorMedia = screen;
                     main.post(() -> dlna.play(device, screen, new Done() {
                         @Override
                         public void ok() {
@@ -487,6 +516,46 @@ class Bridge implements WebViewCompat.WebMessageListener {
         for (Intent i : tries) {
             try {
                 activity.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return true;
+            } catch (ActivityNotFoundException | SecurityException ignored) {
+            }
+        }
+        return false;
+    }
+
+    /** Whether the phone's hotspot is on (Android has no public check, so: the hidden call, then the interfaces). */
+    private boolean hotspotOn() {
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) activity.getApplicationContext().getSystemService(android.content.Context.WIFI_SERVICE);
+            Object r = wm.getClass().getMethod("isWifiApEnabled").invoke(wm);
+            if (r instanceof Boolean) return (Boolean) r;
+        } catch (Exception ignored) {
+        }
+        try {
+            for (java.net.NetworkInterface ni : java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces())) {
+                String n = ni.getName();
+                if (!ni.isUp() || !(n.startsWith("ap") || n.startsWith("swlan") || n.startsWith("softap") || n.equals("wlan1"))) continue;
+                for (java.net.InetAddress addr : java.util.Collections.list(ni.getInetAddresses())) {
+                    if (addr instanceof java.net.Inet4Address) return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Opens the hotspot page of Settings (its address differs between phone makers), else the network page. */
+    private boolean openHotspotSettings() {
+        Intent[] tries = {
+                new Intent("android.settings.TETHER_SETTINGS"),
+                new Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings"),
+                new Intent().setClassName("com.android.settings", "com.android.settings.Settings$TetherSettingsActivity"),
+                new Intent().setClassName("com.android.settings", "com.android.settings.Settings$WifiTetherSettingsActivity"),
+                new Intent(Settings.ACTION_WIRELESS_SETTINGS),
+        };
+        for (Intent i : tries) {
+            try {
+                activity.startActivity(i);
                 return true;
             } catch (ActivityNotFoundException | SecurityException ignored) {
             }

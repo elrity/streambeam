@@ -44,6 +44,7 @@ const FILES = {
   '/sw.js': ['sw.js', 'text/javascript; charset=utf-8', 'no-cache'],
   '/icons/favicon-64.png': ['icons/favicon-64.png', 'image/png', 'public, max-age=604800'],
   '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png', 'public, max-age=604800'],
+  '/icons/logo.webp': ['icons/logo.webp', 'image/webp', 'public, max-age=604800'],
   '/icons/icon-192.png': ['icons/icon-192.png', 'image/png', 'public, max-age=604800'],
   '/icons/icon-512.png': ['icons/icon-512.png', 'image/png', 'public, max-age=604800'],
   '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png', 'public, max-age=604800']

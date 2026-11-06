@@ -100,6 +100,7 @@ textarea { width: 100%; min-height: 140px; resize: vertical; padding: 14px; bord
 .emblem { width: 100%; height: 100%; overflow: visible; display: block; }
 .emblem .disc { fill: url(#discFill); filter: drop-shadow(14px 18px 16px var(--lo)) drop-shadow(-6px -6px 10px var(--hi)); }
 .emblem .line { fill: none; stroke: var(--emblem); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.emblem .prog[stroke-dasharray^="0 "] { visibility: hidden; }
 .emblem .prog { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray .5s; }
 .emblem .word { fill: var(--fg); font: 400 38px/1 var(--f-ui); letter-spacing: 12px; }
 .emblem .time { fill: var(--fg); font: 200 64px/1 var(--f-ui); }
@@ -251,6 +252,14 @@ kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-
 .sheet .opt { padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; color: var(--muted); }
 .sheet .opt + .opt { border-top: 1px solid var(--line); }
 .sheet .opt b { color: var(--fg); font-weight: 400; font-size: 15px; }
+/* Idle screen while casting: black (OLED stays cool), clock drifting a little each minute against burn-in */
+.idle { position: fixed; inset: 0; z-index: 40; background: #000; color: #e9eaed; display: grid; place-items: center; cursor: pointer; }
+.idle .ibox { display: grid; justify-items: center; gap: 10px; text-align: center; transition: transform 2s ease; padding: 0 24px; }
+.idle img { width: 84px; height: 84px; opacity: .55; }
+.idle .iclock { font: 200 clamp(52px, 17vw, 110px)/1 var(--f-ui); letter-spacing: 1px; white-space: nowrap; }
+.idle .idate { font-size: 15px; color: #8a8c92; }
+.idle .inow { margin-top: 18px; font-size: 15px; color: #c9cacd; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.idle .ihint { margin-top: 26px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #55575c; }
 .toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); padding: 12px 20px; border-radius: 14px; background: var(--sheet); box-shadow: 0 8px 24px var(--lo); font-size: 14px; text-align: center; }
 
 /* Landscape and short screens: side by side, tighter */
@@ -335,6 +344,7 @@ kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-
 <input type="file" id="subFile" accept=".srt,.vtt" hidden>
 <div class="scrim" id="scrim" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
+<div class="idle" id="idle" hidden aria-label="Idle screen. Tap to wake"></div>
 
 <script>
 (() => {
@@ -463,7 +473,7 @@ const S = {
   m3u: store.get('m3u', SAMPLE_M3U),
   group: 'All', chSearch: '',
   local: [],
-  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, mirrorMute: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
+  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, mirrorMute: true, hotspot: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
   scanning: false
 };
 /* Devices saved by older versions (fixed demo ids) or demo screens after demo mode is off */
@@ -1275,20 +1285,19 @@ function homeView() {
   </div>`;
 }
 /* The home emblem, drawn as a thin line over a softly raised disc with a warm glint (after the nubia poster).
-   "nissan": upper and lower arcs flaring into the name band, as in the Nissan badge. "ring": a plain ring with the time. */
-const EM_UP = 'M 44 150 H 70 C 78 150 82 145 85.7 138 A 130 130 0 0 1 314.3 138 C 318 145 322 150 330 150 H 356';
-const EM_LOW = 'M 44 250 H 70 C 78 250 82 255 85.7 262 A 130 130 0 0 0 314.3 262 C 318 255 322 250 330 250 H 356';
+   "logo": the app badge (Ni-N7 Egypt owners). "ring": a plain ring with the time. */
 const EM_ARC = 'M 85.7 138 A 130 130 0 0 1 314.3 138';
+const LOGO_ARC = 'M 76.5 130 A 142 142 0 0 1 323.5 130';
 function emblemSvg() {
-  const nissan = S.settings.emblem !== 'ring';
+  const logo = S.settings.emblem !== 'ring';
   return `<svg class="emblem" viewBox="0 0 400 400" aria-hidden="true">
     <defs><linearGradient id="discFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--disc-a)"/><stop offset="1" style="stop-color:var(--disc-b)"/></linearGradient>
       <radialGradient id="glint"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="#ffd27d" stop-opacity=".85"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient></defs>
     <circle class="disc" cx="200" cy="200" r="128"/>
-    ${nissan ? `<path class="line" d="${EM_UP}"/><path class="line" d="${EM_LOW}"/><text class="word" x="206" y="213" text-anchor="middle">NISSAN</text>`
+    ${logo ? `<image href="icons/logo.webp" x="70" y="70" width="260" height="260"/>`
       : `<circle class="line" cx="200" cy="200" r="130"/><text class="time" id="eTime" x="200" y="222" text-anchor="middle">${clockStr()}</text>`}
-    <path class="prog" id="eProg" d="${EM_ARC}" pathLength="100" stroke-dasharray="0 100"/>
-    <circle cx="110" cy="108" r="16" fill="url(#glint)"/>
+    <path class="prog" id="eProg" d="${logo ? LOGO_ARC : EM_ARC}" pathLength="100" stroke-dasharray="0 100"/>
+    ${logo ? '' : '<circle cx="110" cy="108" r="16" fill="url(#glint)"/>'}
   </svg>`;
 }
 function updateConn() {
@@ -1445,8 +1454,9 @@ const views = {
           ${st === 'starting' ? '<i class="spin"></i>' : icon(st === 'live' ? 'stop' : 'mirror')}
           <span class="label ${st === 'live' ? '' : 'acc'}">${st === 'live' ? '<span id="nmTime">0:00</span>' : st === 'starting' ? 'Starting' : 'Start'}</span></button>
         <div style="text-align:center"><div class="np-title">${st === 'live' ? 'On ' + esc(d?.name || 'the screen') : dlna ? 'Mirror to ' + esc(d.name) : 'Choose the car screen'}</div>
-          <div class="label" style="margin-top:6px">${st === 'live' ? 'Live · about 1–4 s behind' : dlna ? 'Your screen as a live video' : 'Tap Start to pick it'}</div></div>
-        <div class="note">Sound stays on the phone or Bluetooth. Apps that block screen recording, such as Netflix or banking apps, show black.</div>
+          <div class="label" style="margin-top:6px">${st === 'live' ? 'Live on the car' : dlna ? 'Your screen as a live video' : 'Tap Start to pick it'}</div>
+          ${st === 'live' ? `<div class="pills" style="margin-top:12px"><button class="btn sm" data-act="mirrorResync">${icon('refresh')}Catch up</button></div>` : ''}</div>
+        <div class="note">Sound plays in the car with the picture. If the car falls behind, tap Catch up. Apps that block screen recording, such as Netflix or banking apps, show black.</div>
         <section class="panel"><details class="more"><summary><span class="label">Chromecast or Miracast TV</span></summary><div class="body">
           <div class="muted" style="font-size:14px">Use Android’s own screen cast for those.</div>
           <div class="pills" style="justify-content:flex-start"><button class="btn sm" data-act="nativeMirror">${icon('cast')}Android screen cast</button></div></div></details></section>`;
@@ -1553,20 +1563,21 @@ const views = {
     const txt = (id, val, ph, type = 'text') => `<div class="field"><input id="${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"></div>`;
     return `<details class="panel more" data-set="Look" ${S.setOpen === 'Look' ? 'open' : ''}><summary><span class="label">Look</span></summary>
         <div class="set"><span>Theme</span>${sel('s-theme', ['Light', 'Dark'], document.documentElement.dataset.theme === 'dark' ? 'Dark' : 'Light')}</div>
-        <div class="set"><span>Home emblem</span>${sel('s-emblem', ['Nissan', 'Ring'], st.emblem === 'ring' ? 'Ring' : 'Nissan')}</div></details>
+        <div class="set"><span>Home emblem</span>${sel('s-emblem', ['Logo', 'Ring'], st.emblem === 'ring' ? 'Ring' : 'Logo')}</div></details>
       <details class="panel more" data-set="Playback" ${S.setOpen === 'Playback' ? 'open' : ''}><summary><span class="label">Playback</span></summary>
         <div class="set"><span>Autoplay queue</span>${sw('s-autoplay', st.autoplay)}</div>
         <div class="set"><span>Resume where I stopped</span>${sw('s-resume', st.resume)}</div>
         <div class="set"><span>Skip</span>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
-        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></details>
+        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div>
+        <div class="set"><span>Suggest VLC for MKV, AVI…</span>${sw('s-vlcFallback', st.vlcFallback)}</div>
+        <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div></details>
       <details class="panel more" data-set="Today" id="geminiSettings" ${S.setOpen === 'Today' ? 'open' : ''}><summary><span class="label">Today</span></summary>
         <div class="set"><span>Gemini key<span class="sub">Free at aistudio.google.com/apikey. Stays on this device.</span></span>${txt('s-geminiKey', st.geminiKey, GM.server ? 'Server key in use' : 'AIza…', 'password')}</div>
         <div class="set"><span>Model</span>${txt('s-geminiModel', st.geminiModel, 'gemini-2.5-flash')}</div>
         <div class="set"><span>News country</span>${txt('s-region', st.region, REGION)}</div>
         <div class="set"><span>Temperature</span>${sel('s-units', ['Auto', '°C', '°F'], st.units === 'C' ? '°C' : st.units === 'F' ? '°F' : 'Auto')}</div></details>
       <details class="panel more" data-set="Screens" ${S.setOpen === 'Screens' ? 'open' : ''}><summary><span class="label">Screens</span></summary>
-        <div class="set"><span>Suggest VLC for MKV, AVI…</span>${sw('s-vlcFallback', st.vlcFallback)}</div>
-        <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div>
+        ${N.on ? `<div class="set"><span>Open hotspot at start<span class="sub">If it’s off, so the car can join</span></span>${sw('s-hotspot', st.hotspot)}</div>` : ''}
         <div class="set"><span>Reconnect to my car or TV<span class="sub">When it appears on the Wi-Fi</span></span>${sw('s-autoConnect', st.autoConnect)}</div>
         <div class="set"><span>Phone sound in mirroring<span class="sub">Plays through the car with the picture</span></span>${sw('s-mirrorSound', st.mirrorSound)}</div>
         <div class="set"><span>Mute the phone while mirroring<span class="sub">Sound only from the car</span></span>${sw('s-mirrorMute', st.mirrorMute)}</div>
@@ -1849,6 +1860,11 @@ document.addEventListener('click', async e => {
         .catch(err => { N.mirror = { state: '', at: 0 }; toast(err.message); render(); });
       break;
     }
+    case 'mirrorResync':
+      // The car's player never skips ahead, so any wait adds delay for good; restarting it there clears it.
+      toast('Catching up… the car restarts the picture');
+      ncall('mirrorResync').catch(err => toast(err.message));
+      break;
     case 'mirrorStop':
       N.mirror = { state: '', at: 0 };
       ncall('mirrorStop').then(() => ncall('stop')).catch(() => {});
@@ -1954,6 +1970,44 @@ function addFiles(files) {
   if (ev === 'drop' && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 }));
 
+/* ---------- Idle screen ----------
+   After a minute without a touch while a screen plays or mirrors: casting shows a black clock screen
+   and dims the phone; mirroring only dims (the car shows whatever the phone shows, so an idle screen
+   would appear in the car too) and keeps the phone awake, since a sleeping phone stops the mirror. */
+const IDLE = { last: Date.now(), on: false, kind: '', awake: false };
+const castingNow = () => nativeOn() && P.playing && !!P.item;
+function idleScreen(dim) { if (N.on) ncall('screen', { dim, awake: N.mirror.state === 'live' }).catch(() => {}); }
+function idleDraw() {
+  const el = $('#idle'); if (el.hidden) return;
+  const now = new Date();
+  el.innerHTML = `<div class="ibox" style="transform:translate(${(Math.random() * 40 - 20) | 0}px,${(Math.random() * 60 - 30) | 0}px)">
+    <img src="icons/logo.webp" alt=""><div class="iclock">${now.toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' })}</div>
+    <div class="idate">${esc(now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }))}</div>
+    ${P.item ? `<div class="inow">${esc(P.item.title || 'Playing')} · ${esc(devName())}</div>` : ''}
+    <div class="ihint">Tap to wake</div></div>`;
+}
+function idleEnter() {
+  IDLE.on = true; IDLE.kind = N.mirror.state === 'live' ? 'mirror' : 'cast';
+  if (IDLE.kind === 'cast') { $('#idle').hidden = false; idleDraw(); }
+  idleScreen(true);
+}
+function idleWake() {
+  IDLE.last = Date.now();
+  if (!IDLE.on) return;
+  IDLE.on = false; $('#idle').hidden = true;
+  idleScreen(false);
+}
+['pointerdown', 'keydown', 'wheel'].forEach(ev => addEventListener(ev, () => { if (!IDLE.on) IDLE.last = Date.now(); }, { capture: true, passive: true }));
+$('#idle').addEventListener('click', e => { e.stopPropagation(); idleWake(); });
+addEventListener('pointerdown', e => { if (IDLE.on && IDLE.kind === 'mirror') idleWake(); }, { capture: true });
+setInterval(() => {
+  const live = N.mirror.state === 'live', busy = live || castingNow();
+  if (N.on && live !== IDLE.awake) { IDLE.awake = live; ncall('screen', { dim: IDLE.on, awake: live }).catch(() => {}); }
+  if (IDLE.on) { if (!busy) idleWake(); else if (IDLE.kind === 'cast' && new Date().getSeconds() < 5) idleDraw(); return; }
+  if (busy && !document.hidden && !sheetKind && Date.now() - IDLE.last > 60000) idleEnter();
+}, 5000);
+document.addEventListener('visibilitychange', () => { if (document.hidden && IDLE.on) idleWake(); });
+
 /* ---------- Boot ---------- */
 if (S.device.startsWith('n:') && !N.on) { S.device = ''; S.deviceName = ''; }
 {
@@ -1966,6 +2020,12 @@ if (S.device.startsWith('n:') && !N.on) { S.device = ''; S.deviceName = ''; }
   else { if (goTo in TITLES) go(goTo); geminiStatus(); }
 }
 if (S.device === 'vlc') vlcConnect(true);
+/* The car joins the phone's hotspot. Android lets only its Settings turn the hotspot on, so when it's off
+   the app opens that page once per start (Settings → Screens → Open hotspot at start). */
+let hotspotAsked = true; try { hotspotAsked = !!sessionStorage.getItem('sb.hotspotAsked'); sessionStorage.setItem('sb.hotspotAsked', '1'); } catch {}
+if (N.on && S.settings.hotspot && !hotspotAsked) {
+  ncall('hotspot', { openIfOff: true }).then(r => { if (r?.opened) toast('Turn on the hotspot, then come back'); }).catch(() => {});
+}
 if (N.on && S.device.startsWith('n:')) ncall('scan', { quiet: true }).catch(() => {});
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
