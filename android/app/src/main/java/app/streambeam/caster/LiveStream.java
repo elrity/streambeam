@@ -20,7 +20,7 @@ class LiveStream implements LocalServer.Live {
         final BlockingQueue<byte[]> queue = new ArrayBlockingQueue<>(90); // ~3 s at 30 fps
         boolean started;
 
-        void offer(byte[] chunk, boolean key) {
+        synchronized void offer(byte[] chunk, boolean key) {
             if (!started) {
                 if (!key) return;
                 started = true;

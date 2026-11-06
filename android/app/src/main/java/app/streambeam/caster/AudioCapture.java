@@ -1,0 +1,131 @@
+package app.streambeam.caster;
+
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioPlaybackCaptureConfiguration;
+import android.media.AudioRecord;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
+import android.media.projection.MediaProjection;
+import android.os.Build;
+
+import androidx.annotation.RequiresApi;
+
+import java.nio.ByteBuffer;
+
+/**
+ * Sends the phone's sound with the mirrored picture (Android 10+): captures what apps are playing
+ * (media, games; apps that forbid capture stay silent) and encodes it as AAC into the same MPEG-TS stream,
+ * so the car plays sound and picture together.
+ */
+@RequiresApi(Build.VERSION_CODES.Q)
+class AudioCapture {
+    static final int RATE = 48000, CHANNELS = 2;
+
+    private final TsMuxer mux;
+    private final LiveStream stream;
+    private AudioRecord record;
+    private MediaCodec codec;
+    private Thread thread;
+    private volatile boolean running;
+
+    AudioCapture(TsMuxer mux, LiveStream stream) {
+        this.mux = mux;
+        this.stream = stream;
+    }
+
+    /** Sets up capture; false if it isn't possible (no permission, unsupported). Throws nothing. */
+    boolean prepare(MediaProjection projection) {
+        try {
+            AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(projection)
+                    .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                    .addMatchingUsage(AudioAttributes.USAGE_GAME)
+                    .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                    .build();
+            AudioFormat format = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_IN_STEREO).build();
+            int min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT);
+            record = new AudioRecord.Builder().setAudioFormat(format).setBufferSizeInBytes(Math.max(min, 8192) * 2)
+                    .setAudioPlaybackCaptureConfig(config).build();
+            if (record.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException();
+            MediaFormat f = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, RATE, CHANNELS);
+            f.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
+            f.setInteger(MediaFormat.KEY_BIT_RATE, 128_000);
+            f.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
+            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+            codec.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            return true;
+        } catch (Exception | Error e) { // SecurityException without the permission, or no capture support
+            release();
+            return false;
+        }
+    }
+
+    void start() {
+        codec.start();
+        record.startRecording();
+        running = true;
+        thread = new Thread(this::loop, "StreamBeam audio");
+        thread.start();
+    }
+
+    private void loop() {
+        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        long baseUs = System.nanoTime() / 1000, samples = 0; // same clock as the screen frames
+        while (running) {
+            try {
+                int in = codec.dequeueInputBuffer(10_000);
+                if (in >= 0) {
+                    ByteBuffer buf = codec.getInputBuffer(in);
+                    int n = buf != null ? record.read(buf, Math.min(buf.capacity(), 4096)) : 0;
+                    if (n > 0) {
+                        codec.queueInputBuffer(in, 0, n, baseUs + samples * 1_000_000 / RATE, 0);
+                        samples += n / (2 * CHANNELS);
+                    } else codec.queueInputBuffer(in, 0, 0, baseUs + samples * 1_000_000 / RATE, 0);
+                }
+                int out;
+                while ((out = codec.dequeueOutputBuffer(info, 0)) >= 0) {
+                    ByteBuffer buf = codec.getOutputBuffer(out);
+                    if (buf != null && info.size > 0 && (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                        byte[] aac = new byte[info.size];
+                        buf.position(info.offset);
+                        buf.get(aac, 0, info.size);
+                        stream.publish(mux.audio(aac, info.presentationTimeUs), false);
+                    }
+                    codec.releaseOutputBuffer(out, false);
+                }
+            } catch (IllegalStateException e) {
+                break;
+            }
+        }
+    }
+
+    void stop() {
+        running = false;
+        try {
+            if (thread != null) thread.join(500);
+        } catch (InterruptedException ignored) {
+        }
+        release();
+    }
+
+    private void release() {
+        if (record != null) {
+            try {
+                record.stop();
+            } catch (IllegalStateException ignored) {
+            }
+            record.release();
+            record = null;
+        }
+        if (codec != null) {
+            try {
+                codec.stop();
+            } catch (IllegalStateException ignored) {
+            }
+            codec.release();
+            codec = null;
+        }
+    }
+}

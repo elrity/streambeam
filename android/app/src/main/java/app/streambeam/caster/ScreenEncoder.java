@@ -23,14 +23,15 @@ class ScreenEncoder {
     private final MediaProjection projection;
     private final int dpi;
     private final LiveStream stream;
-    private final TsMuxer mux = new TsMuxer();
+    private final TsMuxer mux;
     private MediaCodec codec;
     private Surface input;
     private VirtualDisplay display;
     private Thread drain;
     private volatile boolean running;
 
-    ScreenEncoder(MediaProjection projection, int dpi, LiveStream stream) {
+    ScreenEncoder(MediaProjection projection, int dpi, LiveStream stream, TsMuxer mux) {
+        this.mux = mux;
         this.projection = projection;
         this.dpi = dpi;
         this.stream = stream;

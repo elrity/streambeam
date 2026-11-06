@@ -61,6 +61,8 @@ class LocalServer {
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final SecureRandom random = new SecureRandom();
     private ServerSocket server;
+    private String proxyToken;
+    private static final Pattern URI_ATTR = Pattern.compile("URI=\"([^\"]+)\"");
 
     /** Starts on first use; returns the port. */
     synchronized int port() throws IOException {
@@ -90,6 +92,103 @@ class LocalServer {
     /** Registers a live stream; returns its 127.0.0.1 address. */
     String addLive(Live live, String name, String mime) throws IOException {
         return register(new Entry(null, live, name, mime));
+    }
+
+    /**
+     * An address on this phone that passes {@code target} through with CORS allowed, for the page's own player
+     * (IPTV servers rarely allow web pages). HLS playlists are rewritten so their pieces come through here too.
+     * The path carries a random secret, so other devices on the network can't use it as a proxy.
+     */
+    synchronized String proxyUrl(String target) throws IOException {
+        if (proxyToken == null) {
+            byte[] b = new byte[16];
+            random.nextBytes(b);
+            StringBuilder t = new StringBuilder();
+            for (byte x : b) t.append(String.format(Locale.US, "%02x", x));
+            proxyToken = t.toString();
+        }
+        StringBuilder hex = new StringBuilder();
+        for (byte x : target.getBytes(StandardCharsets.UTF_8)) hex.append(String.format(Locale.US, "%02x", x));
+        return "http://127.0.0.1:" + port() + "/p/" + proxyToken + "/" + hex;
+    }
+
+    private void proxy(String hexTarget, String range, boolean head, OutputStream out) throws IOException {
+        byte[] raw = new byte[hexTarget.length() / 2];
+        for (int i = 0; i < raw.length; i++) raw[i] = (byte) Integer.parseInt(hexTarget.substring(2 * i, 2 * i + 2), 16);
+        String target = new String(raw, StandardCharsets.UTF_8);
+        if (!target.matches("(?i)^https?://.+")) {
+            status(out, "400 Bad Request");
+            return;
+        }
+        java.net.HttpURLConnection c = null;
+        for (int hop = 0; hop < 6; hop++) {
+            c = (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
+            c.setConnectTimeout(10000);
+            c.setReadTimeout(30000);
+            c.setInstanceFollowRedirects(false);
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) StreamBeam");
+            if (range != null) c.setRequestProperty("Range", range);
+            int code = c.getResponseCode();
+            String loc = c.getHeaderField("Location");
+            if (code >= 300 && code < 400 && loc != null) {
+                target = new java.net.URL(new java.net.URL(target), loc).toString();
+                c.disconnect();
+                continue;
+            }
+            break;
+        }
+        int code = c.getResponseCode();
+        String type = c.getContentType() != null ? c.getContentType() : "application/octet-stream";
+        boolean playlist = type.toLowerCase(Locale.US).contains("mpegurl") || target.split("\\?")[0].toLowerCase(Locale.US).endsWith(".m3u8");
+        InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        StringBuilder h = new StringBuilder("HTTP/1.1 ").append(code).append(code == 206 ? " Partial Content" : code >= 400 ? " Error" : " OK").append("\r\n")
+                .append("Content-Type: ").append(playlist ? "application/vnd.apple.mpegurl" : type).append("\r\n")
+                .append("Access-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nConnection: close\r\n");
+        try {
+            if (playlist && in != null) {
+                byte[] body = rewrite(target, new String(readAll(in), StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+                out.write(h.append("Content-Length: ").append(body.length).append("\r\n\r\n").toString().getBytes(StandardCharsets.ISO_8859_1));
+                if (!head) out.write(body);
+                return;
+            }
+            if (c.getHeaderField("Content-Length") != null) h.append("Content-Length: ").append(c.getHeaderField("Content-Length")).append("\r\n");
+            if (c.getHeaderField("Content-Range") != null) h.append("Content-Range: ").append(c.getHeaderField("Content-Range")).append("\r\n");
+            if (c.getHeaderField("Accept-Ranges") != null) h.append("Accept-Ranges: ").append(c.getHeaderField("Accept-Ranges")).append("\r\n");
+            out.write(h.append("\r\n").toString().getBytes(StandardCharsets.ISO_8859_1));
+            if (head || in == null) return;
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        } finally {
+            if (in != null) in.close();
+            c.disconnect();
+        }
+    }
+
+    /** Points every piece, variant and key of a playlist back through this proxy. */
+    private String rewrite(String base, String playlist) throws IOException {
+        StringBuilder out = new StringBuilder();
+        for (String line : playlist.split("\r?\n")) {
+            String t = line.trim();
+            if (!t.isEmpty() && !t.startsWith("#")) out.append(proxyUrl(new java.net.URL(new java.net.URL(base), t).toString()));
+            else if (t.startsWith("#") && t.contains("URI=\"")) {
+                Matcher m = URI_ATTR.matcher(line);
+                StringBuffer sb = new StringBuffer();
+                while (m.find()) m.appendReplacement(sb, Matcher.quoteReplacement("URI=\"" + proxyUrl(new java.net.URL(new java.net.URL(base), m.group(1)).toString()) + "\""));
+                m.appendTail(sb);
+                out.append(sb);
+            } else out.append(line);
+            out.append('\n');
+        }
+        return out.toString();
+    }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[16 * 1024];
+        int n;
+        while ((n = in.read(buf)) > 0 && b.size() < (8 << 20)) b.write(buf, 0, n);
+        return b.toByteArray();
     }
 
     /** Stops serving an address handed out earlier. */
@@ -169,6 +268,10 @@ class LocalServer {
                 return;
             }
             String[] path = parts[1].split("\\?")[0].split("/");
+            if (path.length >= 4 && path[1].equals("p") && proxyToken != null && path[2].equals(proxyToken)) {
+                proxy(path[3], range, parts[0].equals("HEAD"), out);
+                return;
+            }
             Entry e = path.length >= 3 && path[1].equals("f") ? files.get(path[2]) : null;
             if (e == null) {
                 status(out, "404 Not Found");

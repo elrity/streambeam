@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Mirror sound: capturing what apps play (Android asks once) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Only asked when you tap Locate on the Today screen -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 

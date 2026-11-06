@@ -62,11 +62,14 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private String mirrorDevice;
     private boolean mirrorStoppedByPage;
     private String relayUrl;
+    private boolean mirrorSound;
+    private final java.util.concurrent.ExecutorService net = Executors.newCachedThreadPool();
 
     Bridge(Activity activity) {
         this.activity = activity;
         cast = CastHelper.create(activity, this);
         dlna = new Dlna(activity, this);
+        dlna.listen();
         endScan = () -> {
             scanning = false;
             cast.stopActiveScan();
@@ -142,7 +145,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 pickFiles(id);
                 break;
             case "mirrorStart":
-                startMirror(id, a.getString("deviceId"));
+                startMirror(id, a.getString("deviceId"), a.optBoolean("sound", true));
                 break;
             case "mirrorStop":
                 mirrorStoppedByPage = MirrorService.isRunning();
@@ -167,6 +170,21 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 active = null;
                 done.ok();
                 break;
+            case "http":
+                fetch(id, a.getString("url"));
+                break;
+            case "proxy": {
+                String target = a.getString("url");
+                work.execute(() -> {
+                    try {
+                        String local = files.proxyUrl(target);
+                        send(new JSONObject().put("id", id).put("ok", true).put("result", new JSONObject().put("url", local)));
+                    } catch (Exception e) {
+                        reply(id, false, "Couldn’t open the stream.");
+                    }
+                });
+                break;
+            }
             case "theme":
                 applyTheme(a.optBoolean("dark"), a.optString("top", "#D9DADE"), a.optString("bottom", "#FCFCFD"));
                 done.ok();
@@ -193,7 +211,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
 
     /* ---------- Mirror to a DLNA screen: the phone screen as a live MPEG-TS video ---------- */
 
-    private void startMirror(int id, String device) {
+    private void startMirror(int id, String device, boolean sound) {
         if (!dlna.has(device)) {
             reply(id, false, cast.has(device) ? "For Chromecast and Google TV, use Android’s Cast option." : "That screen isn’t available. Search again.");
             return;
@@ -201,9 +219,15 @@ class Bridge implements WebViewCompat.WebMessageListener {
         if (MirrorService.isRunning()) MirrorService.stop(activity);
         mirrorId = id;
         mirrorDevice = device;
+        mirrorSound = sound && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+        List<String> ask = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 45); // for the Stop notification
+            ask.add(Manifest.permission.POST_NOTIFICATIONS); // for the Stop notification
         }
+        if (mirrorSound && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ask.add(Manifest.permission.RECORD_AUDIO); // to send the phone's sound with the picture
+        }
+        if (!ask.isEmpty()) activity.requestPermissions(ask.toArray(new String[0]), 45);
         MediaProjectionManager mpm = (MediaProjectionManager) activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE);
         activity.startActivityForResult(mpm.createScreenCaptureIntent(), MIRROR_REQUEST);
     }
@@ -260,7 +284,8 @@ class Bridge implements WebViewCompat.WebMessageListener {
         };
         Intent service = new Intent(activity, MirrorService.class)
                 .putExtra(MirrorService.EXTRA_CODE, resultCode)
-                .putExtra(MirrorService.EXTRA_DATA, data);
+                .putExtra(MirrorService.EXTRA_DATA, data)
+                .putExtra(MirrorService.EXTRA_SOUND, mirrorSound);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(service);
         else activity.startService(service);
     }
@@ -453,6 +478,10 @@ class Bridge implements WebViewCompat.WebMessageListener {
     }
 
     void status(String device, String state, double position, double duration) {
+        // The car stopped playing the mirror (its receiver closed or was switched away): stop capturing too.
+        if ("ended".equals(state) && MirrorService.isRunning() && device != null && device.equals(mirrorDevice)) {
+            main.post(() -> MirrorService.stop(activity));
+        }
         try {
             send(new JSONObject().put("event", "status").put("deviceId", device).put("state", state)
                     .put("position", position).put("duration", duration));
@@ -462,12 +491,64 @@ class Bridge implements WebViewCompat.WebMessageListener {
 
     void session(String device, String state, String error) {
         if ("ended".equals(state) && device != null && device.equals(active)) active = null;
+        if ("ended".equals(state) && MirrorService.isRunning() && device != null && device.equals(mirrorDevice)) {
+            main.post(() -> MirrorService.stop(activity));
+        }
         try {
             JSONObject o = new JSONObject().put("event", "session").put("deviceId", device).put("state", state);
             if (error != null) o.put("error", error);
             send(o);
         } catch (JSONException ignored) {
         }
+    }
+
+    /**
+     * GET for the page (IPTV provider APIs and playlists, which don't allow cross-site requests from a web page).
+     * Text only, at most 40 MB; redirects between http and https are followed.
+     */
+    private void fetch(int id, String url) {
+        if (!url.matches("(?i)^https?://.+")) {
+            reply(id, false, "Only web addresses can be opened.");
+            return;
+        }
+        net.execute(() -> {
+            try {
+                String target = url;
+                for (int hop = 0; hop < 6; hop++) {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
+                    c.setConnectTimeout(10000);
+                    c.setReadTimeout(30000);
+                    c.setInstanceFollowRedirects(false);
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) StreamBeam");
+                    int code = c.getResponseCode();
+                    String loc = c.getHeaderField("Location");
+                    if (code >= 300 && code < 400 && loc != null) {
+                        target = new java.net.URL(new java.net.URL(target), loc).toString();
+                        c.disconnect();
+                        continue;
+                    }
+                    InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                    java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+                    if (in != null) {
+                        try (InputStream s = in) {
+                            byte[] b = new byte[64 * 1024];
+                            int n;
+                            while ((n = s.read(b)) > 0) {
+                                body.write(b, 0, n);
+                                if (body.size() > 40 << 20) throw new IOException("The list is too large.");
+                            }
+                        }
+                    }
+                    c.disconnect();
+                    send(new JSONObject().put("id", id).put("ok", true).put("result",
+                            new JSONObject().put("status", code).put("text", new String(body.toByteArray(), java.nio.charset.StandardCharsets.UTF_8))));
+                    return;
+                }
+                reply(id, false, "Too many redirects.");
+            } catch (Exception e) {
+                reply(id, false, "Couldn’t reach the server. Check the address and your connection.");
+            }
+        });
     }
 
     private void reply(int id, boolean ok, String error) {
@@ -492,6 +573,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
         main.removeCallbacksAndMessages(null);
         files.release();
         work.shutdownNow();
+        net.shutdownNow();
         cast.release();
         dlna.release();
     }

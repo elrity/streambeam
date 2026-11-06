@@ -56,7 +56,8 @@ class Dlna {
     private static final long SEARCH_MS = 7000;
 
     static final class Device {
-        String id, name, model, host, avUrl, avType, rcUrl, rcType;
+        String id, name, model, host, location, avUrl, avType, rcUrl, rcType;
+        volatile long seen;
     }
 
     private final Bridge bridge;
@@ -65,6 +66,7 @@ class Dlna {
     private final ExecutorService io = Executors.newCachedThreadPool();
     private final ScheduledExecutorService poller = Executors.newSingleThreadScheduledExecutor();
     private volatile boolean searching;
+    private volatile MulticastSocket listener;
     private ScheduledFuture<?> pollTask;
     private volatile Device active;
     private volatile boolean userStopped, sawPlaying;
@@ -111,6 +113,18 @@ class Dlna {
     }
 
     private void search() {
+        long started = System.currentTimeMillis();
+        try {
+            searchOnce();
+            Thread.sleep(2500); // let the last descriptions arrive
+        } catch (InterruptedException ignored) {
+        }
+        // Forget screens that didn't answer this search (switched off, or restarted under a new id).
+        Device keep = active;
+        if (found.values().removeIf(d -> d.seen < started && d != keep)) bridge.devicesChanged();
+    }
+
+    private void searchOnce() {
         WifiManager.MulticastLock lock = wifi != null ? wifi.createMulticastLock("streambeam-ssdp") : null;
         List<MulticastSocket> sockets = new ArrayList<>();
         try {
@@ -216,10 +230,78 @@ class Dlna {
             String maker = text(deviceEl, "manufacturer"), model = text(deviceEl, "modelName");
             d.model = ((maker != null ? maker : "") + " " + (model != null ? model : "")).trim();
             d.host = new URL(location).getHost();
+            d.location = location;
+            d.seen = System.currentTimeMillis();
+            // The same screen back under a new id (its receiver app restarted): keep only the new entry.
+            Device keep = active;
+            found.values().removeIf(o -> !o.id.equals(d.id) && o != keep && o.name.equals(d.name) && o.host.equals(d.host));
             found.put(d.id, d);
             bridge.devicesChanged();
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Listens for screens announcing themselves (SSDP NOTIFY), so a car receiver that opens or closes shows up
+     * or disappears at once instead of at the next search.
+     */
+    void listen() {
+        if (listener != null) return;
+        io.execute(() -> {
+            WifiManager.MulticastLock lock = wifi != null ? wifi.createMulticastLock("streambeam-notify") : null;
+            MulticastSocket s = null;
+            try {
+                if (lock != null) {
+                    lock.setReferenceCounted(false);
+                    lock.acquire();
+                }
+                s = new MulticastSocket(null);
+                s.setReuseAddress(true);
+                s.bind(new InetSocketAddress(SSDP_PORT));
+                InetSocketAddress group = new InetSocketAddress(InetAddress.getByName(SSDP_HOST), SSDP_PORT);
+                for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                    if (!ni.isUp() || ni.isLoopback() || !ni.supportsMulticast()) continue;
+                    try {
+                        s.joinGroup(group, ni);
+                    } catch (IOException ignored) {
+                    }
+                }
+                listener = s;
+                byte[] buf = new byte[4096];
+                java.util.Map<String, Long> recent = new java.util.HashMap<>();
+                while (listener == s) {
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    s.receive(p);
+                    String msg = new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8);
+                    if (!msg.startsWith("NOTIFY")) continue;
+                    String nt = header(msg, "nt"), nts = header(msg, "nts"), location = header(msg, "location"), usn = header(msg, "usn");
+                    if (nt == null || !(nt.contains("MediaRenderer") || nt.contains("AVTransport"))) continue;
+                    if ("ssdp:byebye".equals(nts) && usn != null) {
+                        String udn = usn.split("::")[0];
+                        Device d = found.get("dlna:" + udn);
+                        if (d != null && d != active && found.remove(d.id) != null) bridge.devicesChanged();
+                    } else if (location != null && location.startsWith("http")) {
+                        long now = System.currentTimeMillis();
+                        Long last = recent.get(location);
+                        if (last == null || now - last > 20_000) { // each screen repeats its announcement; check it at most every 20 s
+                            recent.put(location, now);
+                            io.execute(() -> describe(location));
+                        }
+                    }
+                }
+            } catch (IOException ignored) {
+            } finally {
+                if (s != null) s.close();
+                if (listener == s) listener = null;
+                if (lock != null && lock.isHeld()) lock.release();
+            }
+        });
+    }
+
+    void stopListening() {
+        MulticastSocket s = listener;
+        listener = null;
+        if (s != null) s.close();
     }
 
     /** Text of the first direct child element with this name (any namespace prefix). */
@@ -373,6 +455,7 @@ class Dlna {
     }
 
     void release() {
+        stopListening();
         stopPolling();
         io.shutdownNow();
         poller.shutdownNow();

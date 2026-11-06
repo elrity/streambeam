@@ -27,7 +27,7 @@ public class MirrorService extends Service {
         void onStopped(String error);
     }
 
-    static final String EXTRA_CODE = "code", EXTRA_DATA = "data", ACTION_STOP = "app.streambeam.caster.STOP_MIRROR";
+    static final String EXTRA_CODE = "code", EXTRA_DATA = "data", EXTRA_SOUND = "sound", ACTION_STOP = "app.streambeam.caster.STOP_MIRROR";
     private static final String CHANNEL = "mirror";
 
     static LocalServer server;
@@ -37,9 +37,11 @@ public class MirrorService extends Service {
     private final Handler main = new Handler(Looper.getMainLooper());
     private MediaProjection projection;
     private ScreenEncoder encoder;
+    private AudioCapture audio;
+    private Thread watchdog;
     private LiveStream stream;
     private String url;
-    private boolean stopping;
+    private volatile boolean stopping;
 
     static boolean isRunning() {
         return running != null;
@@ -73,14 +75,57 @@ public class MirrorService extends Service {
                 ScreenEncoder e = encoder;
                 if (e != null) e.requestKeyFrame();
             });
-            encoder = new ScreenEncoder(projection, getResources().getDisplayMetrics().densityDpi, stream);
+            TsMuxer mux = new TsMuxer();
+            if (intent.getBooleanExtra(EXTRA_SOUND, false) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                AudioCapture a = new AudioCapture(mux, stream);
+                if (a.prepare(projection)) {
+                    audio = a;
+                    mux.enableAudio(AudioCapture.RATE, AudioCapture.CHANNELS);
+                }
+            }
+            encoder = new ScreenEncoder(projection, getResources().getDisplayMetrics().densityDpi, stream, mux);
             encoder.start();
+            if (audio != null) audio.start();
+            startWatchdog();
             url = server.addLive(stream, "phone-screen.ts", "video/mp2t");
             if (listener != null) listener.onLive(url);
         } catch (Exception e) {
             finish(e.getMessage() != null ? e.getMessage() : "Couldn’t start screen sharing.");
         }
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Stops mirroring by itself when the screen goes away: no screen connected for 12 s after one was
+     * (the car turned off, its receiver closed, or Wi-Fi dropped), or none connected within 45 s.
+     */
+    private void startWatchdog() {
+        watchdog = new Thread(() -> {
+            long started = System.currentTimeMillis(), emptySince = 0;
+            boolean hadScreen = false;
+            while (!stopping) {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                long now = System.currentTimeMillis();
+                if (stream.clients() > 0) {
+                    hadScreen = true;
+                    emptySince = 0;
+                } else if (hadScreen) {
+                    if (emptySince == 0) emptySince = now;
+                    else if (now - emptySince > 12_000) {
+                        main.post(() -> finish("The car screen disconnected, so mirroring stopped."));
+                        return;
+                    }
+                } else if (now - started > 45_000) {
+                    main.post(() -> finish("The car screen didn’t start the video."));
+                    return;
+                }
+            }
+        }, "StreamBeam watchdog");
+        watchdog.start();
     }
 
     private void startForegroundNotice() {
@@ -110,7 +155,9 @@ public class MirrorService extends Service {
     private void finish(String error) {
         if (stopping) return;
         stopping = true;
+        if (watchdog != null) watchdog.interrupt();
         if (stream != null) stream.close();
+        if (audio != null) audio.stop();
         if (encoder != null) encoder.stop();
         if (url != null && server != null) server.remove(url);
         if (projection != null) {

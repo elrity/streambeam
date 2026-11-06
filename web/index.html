@@ -331,7 +331,7 @@ kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-
   <div class="mini" id="mini" hidden></div>
 </div>
 
-<video id="video" playsinline crossorigin="anonymous" hidden></video>
+<video id="video" playsinline hidden></video>
 <input type="file" id="subFile" accept=".srt,.vtt" hidden>
 <div class="scrim" id="scrim" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -450,7 +450,8 @@ const DEMO = [
 /* ---------- State ---------- */
 const S = {
   view: 'home',
-  libTab: 'history', setOpen: 'Look', iptvSrc: 'samples',
+  libTab: 'history', setOpen: 'Look', iptvSrc: 'samples', tv: { tab: 'home' },
+  accounts: store.get('accounts', []), acc: store.get('acc', ''),
   url: '',
   detected: [],
   notice: null,
@@ -462,12 +463,12 @@ const S = {
   m3u: store.get('m3u', SAMPLE_M3U),
   group: 'All', chSearch: '',
   local: [],
-  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
+  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
   scanning: false
 };
 /* Devices saved by older versions (fixed demo ids) or demo screens after demo mode is off */
 if (/^(cc-living|roku|fire|dlna|airplay)$/.test(S.device) || (S.device.startsWith('demo-') && !S.settings.demo)) S.device = '';
-const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'deviceName', 'm3u'].forEach(k => store.set(k, S[k])); };
+const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'deviceName', 'm3u', 'accounts', 'acc'].forEach(k => store.set(k, S[k])); };
 
 /* ---------- Playback engine ---------- */
 const video = $('#video');
@@ -558,14 +559,20 @@ function load(item, startAt = 0) {
   Y.key = '';
   if (P.yt) { if (!P.pos && item.start) P.pos = item.start; return; }
   const f = fmtOf(item.url);
-  try {
-    if (f === 'HLS' && !video.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
-      hls = new Hls(); hls.loadSource(item.url); hls.attachMedia(video);
-    } else if (f !== 'DASH') {
-      video.src = item.url;
-    }
-  } catch {}
-  video.volume = P.vol; video.muted = P.muted; video.playbackRate = P.rate;
+  const begin = src => {
+    try {
+      if (f === 'HLS' && !video.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
+        hls = new Hls(); hls.loadSource(src); hls.attachMedia(video);
+      } else if (f !== 'DASH') {
+        video.src = src;
+      }
+    } catch {}
+    video.volume = P.vol; video.muted = P.muted; video.playbackRate = P.rate;
+  };
+  /* In the app, IPTV streams (HLS, or plain http) play through the phone's pass-through: most IPTV servers don't allow web pages */
+  if (N.on && /^https?:/i.test(item.url) && !/^http:\/\/127\.0\.0\.1/.test(item.url) && (f === 'HLS' || /^http:/i.test(item.url))) {
+    ncall('proxy', { url: item.url }).then(r => { if (P.item === item) begin(r.url); }).catch(() => { if (P.item === item) begin(item.url); });
+  } else begin(item.url);
 }
 video.addEventListener('loadedmetadata', () => {
   P.real = true;
@@ -1015,6 +1022,72 @@ async function loadIptv(src) {
   TV.loading = ''; if (S.view === 'iptv') render();
 }
 
+/* ---------- IPTV accounts ----------
+   Xtream Codes (server, username, password) through the provider's player_api.php, or an M3U playlist link.
+   In the app, requests go through Android (providers don't allow web pages); accounts are saved on this device. */
+const XT = { data: {}, loading: {}, failed: {}, shown: [], kind: 'xtream' };
+const acct = () => S.accounts.find(a => a.id === S.acc);
+const xbase = a => a.server.replace(/\/+$/, '');
+const xauth = a => `username=${encodeURIComponent(a.user)}&password=${encodeURIComponent(a.pass)}`;
+async function getText(url) {
+  if (N.on) {
+    const r = await ncall('http', { url });
+    if (r.status >= 400) throw new Error(r.status === 401 || r.status === 403 ? 'The server refused the login.' : `The server answered ${r.status}.`);
+    return r.text;
+  }
+  let r;
+  try { r = await fetch(url); } catch { throw new Error('This provider can only be reached from the StreamBeam app.'); }
+  if (!r.ok) throw new Error(`The server answered ${r.status}.`);
+  return r.text();
+}
+async function xjson(a, action = '', extra = '') {
+  const t = await getText(`${xbase(a)}/player_api.php?${xauth(a)}${action ? '&action=' + action : ''}${extra}`);
+  try { return JSON.parse(t); } catch { throw new Error('The server’s answer wasn’t understood. Check the address.'); }
+}
+/* Cached per account; returns the data, or null while it loads (the view re-renders when it arrives) */
+function xget(key, load) {
+  const a = acct(); if (!a) return null;
+  const k = a.id + ':' + key;
+  if (k in XT.data) return XT.data[k];
+  if (XT.failed[k] || XT.loading[k]) return null;
+  XT.loading[k] = true;
+  load(a).then(d => { XT.data[k] = d; }).catch(e => { XT.failed[k] = e.message || 'Couldn’t load this.'; })
+    .finally(() => { delete XT.loading[k]; if (S.view === 'iptv') render(); });
+  return null;
+}
+const xerr = key => { const a = acct(); return a && XT.failed[a.id + ':' + key]; };
+const asList = d => Array.isArray(d) ? d : d && typeof d === 'object' ? Object.values(d) : [];
+function xItem(a, kind, x) {
+  const b = xbase(a), u = encodeURIComponent(a.user), p = encodeURIComponent(a.pass);
+  if (kind === 'live') return { id: 'x' + x.stream_id, title: x.name || 'Channel', logo: x.stream_icon, live: true, res: 'Live', duration: 0,
+    url: `${b}/live/${u}/${p}/${x.stream_id}.m3u8`, tsUrl: `${b}/live/${u}/${p}/${x.stream_id}.ts` };
+  if (kind === 'movie') return { id: 'm' + x.stream_id, title: x.name || 'Movie', logo: x.stream_icon, res: x.rating ? '★ ' + x.rating : '', duration: 0,
+    url: `${b}/movie/${u}/${p}/${x.stream_id}.${x.container_extension || 'mp4'}` };
+  return { id: 'e' + x.id, title: x.title || 'Episode', logo: x.info?.movie_image, res: '', duration: +x.info?.duration_secs || 0,
+    url: `${b}/series/${u}/${p}/${x.id}.${x.container_extension || 'mp4'}` };
+}
+async function addAccount(form) {
+  const v = n => (form.querySelector(`[name=${n}]`)?.value || '').trim();
+  const fix = u => !u ? '' : /^https?:\/\//i.test(u) ? u : 'http://' + u;
+  const a = { id: uid(), kind: XT.kind, name: v('name') };
+  if (a.kind === 'xtream') {
+    Object.assign(a, { user: v('user'), pass: v('pass'), server: fix(v('server')) });
+    if (!a.user || !a.pass || !a.server) throw new Error('Fill in the username, password and server address.');
+    const j = await xjson(a);
+    if (!j || !j.user_info || +j.user_info.auth === 0) throw new Error('Wrong username or password.');
+    a.exp = +j.user_info.exp_date || 0; a.status = j.user_info.status || '';
+    a.name = a.name || new URL(a.server).hostname;
+  } else {
+    a.url = fix(v('url'));
+    if (!a.url) throw new Error('Paste the playlist link.');
+    const list = parseM3U(await getText(a.url));
+    if (!list.length) throw new Error('No channels found in that playlist.');
+    XT.data[a.id + ':m3u'] = list;
+    a.name = a.name || new URL(a.url).hostname;
+  }
+  S.accounts.push(a); S.acc = a.id; S.tv = { tab: 'home' }; save();
+}
+
 /* ---------- M3U ---------- */
 function parseM3U(text) {
   const out = []; let cur = null;
@@ -1045,6 +1118,7 @@ if (NB) {
     if (m.id && N.wait.has(m.id)) { const w = N.wait.get(m.id); N.wait.delete(m.id); m.ok ? w.res(m.result) : w.rej(new Error(m.error || 'The app couldn’t do that.')); return; }
     if (m.event === 'devices') {
       N.devices = m.devices || []; N.scanning = !!m.scanning;
+      adoptRemembered();
       if (sheetKind === 'devices') drawDevices();
       if (S.view === 'home') updateConn();
     } else if (m.event === 'status') onNativeStatus(m);
@@ -1068,7 +1142,8 @@ const castable = url => /^https?:/i.test(url) && !ytParse(url);
 const MIME = { MP4: 'video/mp4', WEBM: 'video/webm', HLS: 'application/x-mpegURL', DASH: 'application/dash+xml', MKV: 'video/x-matroska', MOV: 'video/quicktime', AVI: 'video/x-msvideo', FLV: 'video/x-flv', WMV: 'video/x-ms-wmv', TS: 'video/mp2t', AUDIO: 'audio/mpeg' };
 async function nativePlay(item, start) {
   try {
-    await ncall('play', { deviceId: S.device.slice(2), url: item.url, title: item.title, mime: item.mime || MIME[fmtOf(item.url)] || 'video/mp4', start: Math.floor(start || 0), live: !!item.live });
+    const ts = S.device.startsWith('n:dlna:') && item.tsUrl;
+    await ncall('play', { deviceId: S.device.slice(2), url: ts ? item.tsUrl : item.url, title: item.title, mime: ts ? 'video/mp2t' : item.mime || MIME[fmtOf(item.url)] || 'video/mp4', start: Math.floor(start || 0), live: !!item.live });
   } catch (e) { nativeFail(e); }
 }
 function nativeFail(e) { toast(e.message || 'The screen didn’t respond'); P.playing = false; tick(true); }
@@ -1085,6 +1160,24 @@ function onNativeSession(m) {
   if (m.state === 'ended') { if (nativeOn()) P.playing = false; toast('Disconnected from ' + devName()); render(); }
   else if (m.state === 'failed') toast(m.error || 'Couldn’t connect to ' + devName());
 }
+/* The last screen used is remembered by name: a car receiver that restarts comes back under a new id,
+   and one that appears on the Wi-Fi again is reconnected (Settings → Reconnect to my car or TV). */
+function adoptRemembered() {
+  if (!S.deviceName || !S.settings.autoConnect) return;
+  if (S.device.startsWith('n:') && N.devices.some(d => 'n:' + d.id === S.device)) return;
+  if (S.device && !S.device.startsWith('n:')) return;
+  const same = N.devices.find(d => d.name === S.deviceName);
+  if (!same) return;
+  S.device = 'n:' + same.id; save();
+  ncall('connect', { deviceId: same.id }).then(() => toast('Connected to ' + same.name)).catch(() => {});
+  if (S.view === 'home') updateConn(); else if (sheetKind !== 'devices') render();
+}
+setInterval(() => {
+  if (!N.on || document.hidden || N.scanning || sheetKind || !S.deviceName || !S.settings.autoConnect || N.mirror.state) return;
+  if (S.device.startsWith('n:') && N.devices.some(d => 'n:' + d.id === S.device)) return;
+  ncall('scan', { quiet: true }).catch(() => {});
+}, 15000);
+
 /* Remote-control commands for whichever external player is active (VLC relay or a native screen) */
 function extCmd(cmd, v) {
   if (vlcOn()) {
@@ -1120,6 +1213,7 @@ let depth = 0;
 function go(view) {
   if (view === S.view || !(view in TITLES)) return;
   try { if (S.view === 'home') { history.pushState({ sb: view }, '', '#' + view); depth = 1; } else history.replaceState({ sb: view }, '', '#' + view); } catch {}
+  if (view === 'iptv') { S.tv = { tab: 'home' }; S.chSearch = ''; } // IPTV always opens on its dashboard
   S.view = view; render();
 }
 function setView(v) { if (S.view !== v) go(v); }
@@ -1215,6 +1309,84 @@ function sectionView(v) {
     <div class="scroll"><div class="inner">${views[v]()}</div></div></div>`;
 }
 
+/* ---------- IPTV hub views ---------- */
+function tvLogin() {
+  const k = XT.kind;
+  const f = (name, ph, type = 'text') => `<div class="field"><input name="${name}" type="${type === 'url' ? 'text' : type}" ${type === 'url' ? 'inputmode="url"' : ''} placeholder="${ph}" autocomplete="off" autocapitalize="off" spellcheck="false"></div>`;
+  return `<div class="seg" role="group"><button data-act="tvKind" data-kind="xtream" aria-pressed="${k === 'xtream'}">Xtream code</button><button data-act="tvKind" data-kind="m3u" aria-pressed="${k === 'm3u'}">M3U link</button></div>
+    <form id="accForm" class="panel" style="padding:18px;display:flex;flex-direction:column;gap:12px" autocomplete="off" novalidate>
+      <div class="label">Your playlist</div>
+      ${f('name', 'Any name')}
+      ${k === 'xtream' ? f('user', 'Username') + f('pass', 'Password', 'password') + f('server', 'http://server.com:port', 'url') : f('url', 'http://…/playlist.m3u', 'url')}
+      ${XT.err ? `<div class="note warn" style="padding:10px 14px">${esc(XT.err)}</div>` : ''}
+      <button class="btn acc" type="submit" ${XT.busy ? 'disabled' : ''}>${XT.busy ? 'Checking…' : 'Add playlist'}</button></form>
+    ${!N.on ? '<div class="note">Provider logins work in the StreamBeam Android app.</div>' : ''}
+    <div class="pills" style="justify-content:flex-start"><button class="btn sm" data-act="tvFree">${icon('globe')}Free channels</button>
+      ${S.accounts.length ? `<button class="btn sm" data-act="tvHome">${icon('left')}My playlists</button>` : ''}</div>`;
+}
+function tvHome(a) {
+  const exp = a.exp ? new Date(a.exp * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const tile = (act, ic, label, sub = '') => `<button class="go" data-act="${act}" style="aspect-ratio:1">${icon(ic)}<span class="label">${label}</span>${sub ? `<span class="label" style="font-size:9px;opacity:.7">${sub}</span>` : ''}</button>`;
+  return `<div class="panel" style="padding:16px 20px;display:flex;align-items:center;gap:12px">
+      <div style="flex:1;min-width:0"><div class="np-title" style="font-size:20px">${esc(a.name)}</div>
+        <div class="label" style="margin-top:4px">${a.kind === 'm3u' ? 'M3U playlist' : exp ? 'Expires ' + esc(exp) : 'Xtream code'}${a.status && a.status !== 'Active' ? ' · ' + esc(a.status) : ''}</div></div>
+      <button class="round sm" data-act="tvAccounts" aria-label="Playlists">${icon('lib')}</button></div>
+    <div class="grid" style="width:100%;height:auto;padding:4px 2px">
+      ${a.kind === 'xtream' ? tile('tvLive', 'tv', 'Live TV') + tile('tvMovies', 'play', 'Movies') + tile('tvSeries', 'list', 'Series') : tile('tvLive', 'tv', 'Channels')}
+      ${tile('tvFree', 'globe', 'Free TV')}${tile('tvSearch', 'search', 'Search')}${tile('tvAdd', 'plus', 'Add')}</div>
+    ${S.tv.accounts ? `<section class="panel">${S.accounts.map(x => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div class="meta"><div class="t">${esc(x.name)}${x.id === S.acc ? ' ·' : ''}</div><div class="s"><span>${x.kind === 'm3u' ? 'M3U' : 'Xtream'}</span></div></div>
+        <div class="acts"><button class="round sm" data-act="tvRemove" data-acc="${x.id}" aria-label="Remove">${icon('x')}</button>${x.id === S.acc ? '' : `<button class="round sm acc" data-act="tvUse" data-acc="${x.id}" aria-label="Use">${icon('play')}</button>`}</div></div>`).join('')}</section>` : ''}`;
+}
+function tvBrowse(a, t) {
+  const kind = t === 'live' ? 'live' : t === 'movies' ? 'movie' : t === 'series' ? 'series' : 'search';
+  let cats = [], items = null, key;
+  if (a.kind === 'm3u') {
+    const all = xget('m3u', x => getText(x.url).then(parseM3U));
+    cats = all ? [...new Set(all.map(c => c.group))] : [];
+    items = all && (S.tv.cat ? all.filter(c => c.group === S.tv.cat) : all);
+    key = 'm3u';
+  } else if (kind === 'search') {
+    const all = [].concat(...['live', 'movie', 'series'].map(k => { const d = xget(k + ':all', x => xjson(x, k === 'live' ? 'get_live_streams' : k === 'movie' ? 'get_vod_streams' : 'get_series')); return d ? asList(d).map(v => ({ k, v })) : []; }));
+    const q = S.chSearch.toLowerCase();
+    items = q.length < 2 ? [] : all.filter(({ v }) => (v.name || '').toLowerCase().includes(q)).slice(0, 120)
+      .map(({ k, v }) => k === 'series' ? { series: v.series_id, title: v.name, logo: v.cover } : xItem(a, k, v));
+    key = 'live:all';
+  } else {
+    const action = kind === 'live' ? 'get_live_categories' : kind === 'movie' ? 'get_vod_categories' : 'get_series_categories';
+    cats = asList(xget(kind + ':cats', x => xjson(x, action)));
+    const cat = S.tv.cat || '';
+    const list = cat ? 'get_' + (kind === 'live' ? 'live_streams' : kind === 'movie' ? 'vod_streams' : 'series') : null;
+    key = kind + ':' + (cat || 'cats');
+    const raw = cat ? xget(kind + ':' + cat, x => xjson(x, list, '&category_id=' + encodeURIComponent(cat))) : null;
+    items = cat ? (raw && asList(raw).map(v => kind === 'series' ? { series: v.series_id, title: v.name, logo: v.cover } : xItem(a, kind, v))) : null;
+  }
+  const q = S.chSearch.toLowerCase();
+  const shown = (items || []).filter(i => kind === 'search' || !q || (i.title || '').toLowerCase().includes(q)).slice(0, 150);
+  XT.shown = shown;
+  const err = xerr(key) || xerr(kind + ':cats');
+  const catOpts = a.kind === 'm3u' ? cats.map(c => [c, c]) : cats.map(c => [c.category_id, c.category_name]);
+  const title = { live: a.kind === 'm3u' ? 'Channels' : 'Live TV', movie: 'Movies', series: 'Series', search: 'Search' }[kind];
+  return `<div class="label">${title}</div>
+    ${kind !== 'search' ? `<div class="field">${icon('list')}<select id="tvCat" aria-label="Category"><option value="">${a.kind === 'm3u' ? 'All channels' : 'Choose a category'}</option>${catOpts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(S.tv.cat || '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>` : ''}
+    <div class="field">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="${kind === 'search' ? 'Search live, movies and series' : 'Search'}" aria-label="Search"></div>
+    ${err ? `<div class="note warn">${esc(err)}<div class="acts"><button class="btn sm" data-act="tvRetry">Try again</button></div></div>` : ''}
+    <section class="panel"><div data-list="xt">${items === null && !err ? (Object.keys(XT.loading).length ? '<div class="empty"><i class="spin" style="display:inline-block;vertical-align:middle"></i> Loading…</div>' : '<div class="empty">Choose a category.</div>')
+      : shown.map((i, n) => `<button class="row" data-xi="${n}" style="width:100%;text-align:left">${thumb(i.logo ? i : { ...i, url: '' })}<div class="meta"><div class="t">${esc(i.title)}</div><div class="s">${i.series ? '<span>Series</span>' : `<span>${i.live ? 'Live' : esc(fmtOf(i.url))}</span>${i.res ? `<span>${esc(i.res)}</span>` : ''}`}</div></div><span class="round sm acc">${icon(i.series ? 'list' : 'play')}</span></button>`).join('') || '<div class="empty">Nothing here.</div>'}
+      ${items && items.length > shown.length && kind !== 'search' ? `<div class="empty">Showing ${shown.length} of ${items.length}. Search to find more.</div>` : ''}</div></section>`;
+}
+function tvSeries(a) {
+  const id = S.tv.series;
+  const info = xget('series:' + id, x => xjson(x, 'get_series_info', '&series_id=' + encodeURIComponent(id)));
+  if (!info) return xerr('series:' + id) ? `<div class="note warn">${esc(xerr('series:' + id))}</div>` : '<div class="empty"><i class="spin" style="display:inline-block;vertical-align:middle"></i> Loading…</div>';
+  const seasons = Object.keys(info.episodes || {}).sort((x, y) => x - y);
+  const season = S.tv.season && seasons.includes(S.tv.season) ? S.tv.season : seasons[0];
+  const eps = asList((info.episodes || {})[season]).map(e => ({ ...xItem(a, 'episode', e), title: `${e.episode_num ? e.episode_num + '. ' : ''}${e.title || 'Episode'}` }));
+  XT.shown = eps;
+  return `<div class="np-title">${esc(info.info?.name || '')}</div>
+    <div class="chips">${seasons.map(n => `<button class="chip" data-act="tvSeason" data-season="${esc(n)}" aria-pressed="${n === season}">Season ${esc(n)}</button>`).join('')}</div>
+    <section class="panel"><div data-list="xt">${eps.map((i, n) => `<button class="row" data-xi="${n}" style="width:100%;text-align:left">${thumb(i.logo ? i : { ...i, url: '' })}<div class="meta"><div class="t">${esc(i.title)}</div><div class="s"><span>${esc(fmtOf(i.url))}</span>${i.duration ? `<span>${fmt(i.duration)}</span>` : ''}</div></div><span class="round sm acc">${icon('play')}</span></button>`).join('') || '<div class="empty">No episodes.</div>'}</div></section>`;
+}
+
 const views = {
   browser() {
     const bm = S.bookmarks.some(b => b.url === S.url);
@@ -1300,6 +1472,16 @@ const views = {
   },
 
   iptv() {
+    const a = acct(), t = S.tv.tab;
+    const back = `<button class="chip" data-act="tvHome" style="align-self:flex-start">‹ IPTV</button>`;
+    if (t === 'free') return back + views.iptvFree();
+    if (!a || t === 'login') return tvLogin();
+    if (t === 'home') return tvHome(a);
+    if (t === 'series1') return back + tvSeries(a);
+    return back + tvBrowse(a, t);
+  },
+
+  iptvFree() {
     const src = S.iptvSrc, ch = iptvChannels();
     if (!ch) loadIptv(src);
     const list = ch || [];
@@ -1375,6 +1557,8 @@ const views = {
       <details class="panel more" data-set="Screens" ${S.setOpen === 'Screens' ? 'open' : ''}><summary><span class="label">Screens</span></summary>
         <div class="set"><span>Suggest VLC for MKV, AVI…</span>${sw('s-vlcFallback', st.vlcFallback)}</div>
         <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div>
+        <div class="set"><span>Reconnect to my car or TV<span class="sub">When it appears on the Wi-Fi</span></span>${sw('s-autoConnect', st.autoConnect)}</div>
+        <div class="set"><span>Phone sound in mirroring<span class="sub">Plays through the car with the picture</span></span>${sw('s-mirrorSound', st.mirrorSound)}</div>
         <div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div></details>
       <div class="label" style="text-align:center">StreamBeam${N.on ? ' · App' : ''}</div>`;
   }
@@ -1582,7 +1766,7 @@ function findItem(row) {
 const RATES = [1, 1.25, 1.5, 2, .5, .75];
 
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-ask],[data-copyask]');
+  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-xi],[data-ask],[data-copyask]');
   if (!b || scrim.contains(b)) return;
   if (b.dataset.go) return go(b.dataset.go);
   if (b.dataset.ask) return ask(b.dataset.ask);
@@ -1594,6 +1778,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
   if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(c, { from: 0 }); }
   if (b.dataset.group) { S.group = b.dataset.group; return render(); }
+  if (b.dataset.xi) { const it = XT.shown[+b.dataset.xi]; if (!it) return; if (it.series) { S.tv = { tab: 'series1', series: it.series }; return render(); } return playItem({ ...it, id: uid() }, { from: 0 }); }
   if (b.dataset.src) { S.iptvSrc = b.dataset.src; S.group = 'All'; S.chSearch = ''; TV.err = ''; render(); $('.scroll') && ($('.scroll').scrollTop = 0); return; }
   const act = b.dataset.act;
   const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
@@ -1646,7 +1831,7 @@ document.addEventListener('click', async e => {
       if (!d || !S.device.startsWith('n:dlna:')) { toast('Pick the car screen first'); openDevices(); break; }
       if (P.item) stop();
       N.mirror = { state: 'starting', at: 0 }; render();
-      ncall('mirrorStart', { deviceId: S.device.slice(2) })
+      ncall('mirrorStart', { deviceId: S.device.slice(2), sound: S.settings.mirrorSound })
         .then(() => { N.mirror = { state: 'live', at: Date.now() }; toast('Mirroring to ' + d.name); render(); })
         .catch(err => { N.mirror = { state: '', at: 0 }; toast(err.message); render(); });
       break;
@@ -1665,6 +1850,23 @@ document.addEventListener('click', async e => {
     case 'unbookmark': S.bookmarks.splice(ctx.idx, 1); save(); render(); break;
     case 'openBm': go('browser'); browse(ctx.item.url); break;
     case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`${parseM3U(S.m3u).length} channels`); render(); break;
+    case 'tvHome': S.tv = { tab: 'home' }; XT.err = ''; S.chSearch = ''; render(); break;
+    case 'tvFree': S.tv = { tab: 'free' }; render(); break;
+    case 'tvLive': S.tv = { tab: 'live' }; S.chSearch = ''; render(); break;
+    case 'tvMovies': S.tv = { tab: 'movies' }; S.chSearch = ''; render(); break;
+    case 'tvSeries': S.tv = { tab: 'series' }; S.chSearch = ''; render(); break;
+    case 'tvSearch': S.tv = { tab: 'search' }; S.chSearch = ''; render(); $('#chSearch')?.focus(); break;
+    case 'tvAdd': S.tv = { tab: 'login' }; XT.err = ''; render(); break;
+    case 'tvKind': XT.kind = b.dataset.kind; XT.err = ''; render(); break;
+    case 'tvAccounts': S.tv = { ...S.tv, accounts: !S.tv.accounts }; render(); break;
+    case 'tvUse': S.acc = b.dataset.acc; S.tv = { tab: 'home' }; save(); render(); break;
+    case 'tvRemove': {
+      S.accounts = S.accounts.filter(x => x.id !== b.dataset.acc);
+      if (S.acc === b.dataset.acc) S.acc = S.accounts[0]?.id || '';
+      S.tv = { tab: 'home', accounts: S.accounts.length > 0 }; save(); toast('Playlist removed'); render(); break;
+    }
+    case 'tvSeason': S.tv = { ...S.tv, season: b.dataset.season }; render(); break;
+    case 'tvRetry': { const a = acct(); if (a) Object.keys(XT.failed).filter(k => k.startsWith(a.id + ':')).forEach(k => delete XT.failed[k]); render(); break; }
     case 'iptvRetry': TV.err = ''; loadIptv(S.iptvSrc); break;
     case 'm3uSample': S.m3u = SAMPLE_M3U; S.group = 'All'; save(); render(); break;
   }
@@ -1680,6 +1882,13 @@ document.addEventListener('toggle', e => {
 
 document.addEventListener('submit', e => {
   if (e.target.id === 'urlForm') { e.preventDefault(); browse($('#urlInput').value); }
+  if (e.target.id === 'accForm') {
+    e.preventDefault(); XT.busy = true; XT.err = ''; render();
+    const form = e.target, values = new FormData(form);
+    const holder = document.createElement('form'); for (const [k, v] of values) { const i = document.createElement('input'); i.name = k; i.value = v; holder.appendChild(i); }
+    addAccount(holder).then(() => { XT.busy = false; toast('Playlist added'); render(); })
+      .catch(err => { XT.busy = false; XT.err = err.message; render(); const f = $('#accForm'); if (f) for (const [k, v] of values) { const i = f.querySelector(`[name=${k}]`); if (i) i.value = v; } });
+  }
   if (e.target.id === 'askForm') {
     e.preventDefault(); const q = $('#askInput').value.trim(); if (!q) return;
     if (geminiReady()) ask(null, q);
@@ -1715,6 +1924,7 @@ document.addEventListener('change', async e => {
     save(); toast('Saved');
   }
   if (t.id === 'fileIn') addFiles(t.files);
+  if (t.id === 'tvCat') { S.tv = { ...S.tv, cat: t.value }; S.chSearch = ''; render(); }
   if (t.id === 'tCity') { S.settings.city = t.value.trim(); save(); }
   if (t.id === 'm3uFile' && t.files[0]) { $('#m3uText').value = await t.files[0].text(); }
 });
