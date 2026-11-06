@@ -124,3 +124,23 @@ Play needs an Android App Bundle: run `./gradlew bundleRelease` (or choose
 key, then upload `app/build/outputs/bundle/release/app-release.aab` in Play
 Console. Play signs the app with its own key, so add Play's "App signing key"
 SHA-256 to `ANDROID_CERT_SHA256` too (comma-separated).
+
+## Activation (one phone per code)
+
+Builds made with the repository variable `REQUIRE_ACTIVATION` set to `true` open only on activated phones.
+
+1. The phone shows its **device code** (like `K7QX2-MRH4D`) and a *Send code* button.
+2. The owner runs **Actions → Activate a phone → Run workflow** with that code (or
+   `node tools/activate.mjs CODE key.pem` locally). The run's summary has an activation link.
+3. The person taps the link on that phone (or pastes it): StreamBeam opens activated.
+
+The code is a signature of that phone's device code made with the owner's private key (secret
+`LICENSE_PRIVATE_KEY`); the app holds only the public key (`Activation.java`). It fits that one phone, so
+passing on the APK or the code doesn't activate another phone. The device code stays the same after
+reinstalling; a factory reset changes it.
+
+## Mirroring sound
+
+With *Phone sound in mirroring* on, the sound goes to the car inside the video. *Mute the phone while
+mirroring* mutes the phone's own media volume for the session (restored when mirroring stops); the capture
+is unaffected. If a phone ever captures only silence while muted, the app turns the phone's sound back on.

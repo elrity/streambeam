@@ -28,6 +28,11 @@
             android:value="app.streambeam.caster.CastOptionsProvider" />
 
         <activity
+            android:name=".ActivationActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false"
+            android:launchMode="singleTask" />
+        <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
@@ -50,4 +55,9 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
     </application>
+    <!-- To open the phone's default assistant (Gemini, Google Assistant, Bixby…) from the Gemini button -->
+    <queries>
+        <intent><action android:name="android.intent.action.ASSIST" /></intent>
+        <intent><action android:name="android.intent.action.VOICE_COMMAND" /></intent>
+    </queries>
 </manifest>

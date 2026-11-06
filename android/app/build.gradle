@@ -23,6 +23,8 @@ android {
         targetSdk 35
         versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
         versionName twa.getProperty('versionName', '1.0')
+        // Builds made with REQUIRE_ACTIVATION=true open only on phones activated by the owner (Activation.java).
+        buildConfigField 'boolean', 'REQUIRE_ACTIVATION', (System.getenv('REQUIRE_ACTIVATION') == 'true').toString()
         manifestPlaceholders = [hostName: twa.getProperty('host'), pathPrefix: twa.getProperty('path', '/')]
     }
 

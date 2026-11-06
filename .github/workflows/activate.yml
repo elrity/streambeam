@@ -1,0 +1,44 @@
+# Makes the activation link for one phone (only needed when REQUIRE_ACTIVATION is on).
+# Actions → "Activate a phone" → Run workflow → paste the device code the phone shows.
+# Needs the LICENSE_PRIVATE_KEY repository secret (the private key file's text). The link appears in the
+# run's summary; it works on that one phone only, so it's fine that run summaries are visible.
+name: Activate a phone
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_code:
+        description: Device code shown on the phone (like K7QX2-MRH4D)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sign the device code
+        env:
+          LICENSE_PRIVATE_KEY: ${{ secrets.LICENSE_PRIVATE_KEY }}
+          APP_URL: ${{ vars.APP_URL || 'https://elrity.github.io/streambeam/' }}
+          DEVICE_CODE: ${{ inputs.device_code }}
+        run: |
+          if [ -z "$LICENSE_PRIVATE_KEY" ]; then
+            echo "::error::Add the LICENSE_PRIVATE_KEY secret first (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+          out="$(node tools/activate.mjs "$DEVICE_CODE")"
+          echo "$out"
+          link="$(echo "$out" | sed -n 's/^Activation link: //p')"
+          {
+            echo "### Activation for $(echo "$out" | sed -n 's/^Device: //p')"
+            echo
+            echo "Send this link to the phone's owner. Tapping it on that phone opens StreamBeam and activates it:"
+            echo
+            echo "$link"
+          } >> "$GITHUB_STEP_SUMMARY"

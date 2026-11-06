@@ -46,6 +46,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        if (Activation.required() && !Activation.isActive(this)) {
+            // Not activated on this phone yet: the activation screen takes over (and handles ?act= links).
+            startActivity(new Intent(this, ActivationActivity.class).setData(getIntent().getData()));
+            finish();
+            return;
+        }
         start = Uri.parse(getString(R.string.start_url));
         root = new FrameLayout(this);
         web = new WebView(this);
@@ -87,7 +93,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        web.saveState(out);
+        if (web != null) web.saveState(out);
     }
 
     @Override
@@ -100,8 +106,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        bridge.release();
-        web.destroy();
+        if (bridge != null) bridge.release();
+        if (web != null) web.destroy();
         super.onDestroy();
     }
 

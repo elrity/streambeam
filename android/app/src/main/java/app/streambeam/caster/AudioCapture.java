@@ -29,6 +29,7 @@ class AudioCapture {
     private MediaCodec codec;
     private Thread thread;
     private volatile boolean running;
+    private volatile long lastSound;
 
     AudioCapture(TsMuxer mux, LiveStream stream) {
         this.mux = mux;
@@ -80,6 +81,7 @@ class AudioCapture {
                     ByteBuffer buf = codec.getInputBuffer(in);
                     int n = buf != null ? record.read(buf, Math.min(buf.capacity(), 4096)) : 0;
                     if (n > 0) {
+                        if (!silent(buf, n)) lastSound = System.currentTimeMillis();
                         codec.queueInputBuffer(in, 0, n, baseUs + samples * 1_000_000 / RATE, 0);
                         samples += n / (2 * CHANNELS);
                     } else codec.queueInputBuffer(in, 0, 0, baseUs + samples * 1_000_000 / RATE, 0);
@@ -99,6 +101,17 @@ class AudioCapture {
                 break;
             }
         }
+    }
+
+    /** When captured sound was last not pure silence (0 if never). */
+    long lastSound() {
+        return lastSound;
+    }
+
+    private static boolean silent(ByteBuffer buf, int n) {
+        int start = buf.position();
+        for (int i = start; i + 1 < start + n; i += 32) if (buf.get(i) != 0 || buf.get(i + 1) != 0) return false;
+        return true;
     }
 
     void stop() {

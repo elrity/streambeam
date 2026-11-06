@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioManager;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
@@ -27,7 +28,7 @@ public class MirrorService extends Service {
         void onStopped(String error);
     }
 
-    static final String EXTRA_CODE = "code", EXTRA_DATA = "data", EXTRA_SOUND = "sound", ACTION_STOP = "app.streambeam.caster.STOP_MIRROR";
+    static final String EXTRA_CODE = "code", EXTRA_DATA = "data", EXTRA_SOUND = "sound", EXTRA_MUTE = "mute", ACTION_STOP = "app.streambeam.caster.STOP_MIRROR";
     private static final String CHANNEL = "mirror";
 
     static LocalServer server;
@@ -42,6 +43,9 @@ public class MirrorService extends Service {
     private LiveStream stream;
     private String url;
     private volatile boolean stopping;
+    private AudioManager sound;
+    private volatile boolean muted;
+    private long mutedAt;
 
     static boolean isRunning() {
         return running != null;
@@ -85,7 +89,10 @@ public class MirrorService extends Service {
             }
             encoder = new ScreenEncoder(projection, getResources().getDisplayMetrics().densityDpi, stream, mux);
             encoder.start();
-            if (audio != null) audio.start();
+            if (audio != null) {
+                audio.start();
+                if (intent.getBooleanExtra(EXTRA_MUTE, true)) mutePhone();
+            }
             startWatchdog();
             url = server.addLive(stream, "phone-screen.ts", "video/mp2t");
             if (listener != null) listener.onLive(url);
@@ -110,6 +117,7 @@ public class MirrorService extends Service {
                     return;
                 }
                 long now = System.currentTimeMillis();
+                checkMute(now);
                 if (stream.clients() > 0) {
                     hadScreen = true;
                     emptySince = 0;
@@ -126,6 +134,38 @@ public class MirrorService extends Service {
             }
         }, "StreamBeam watchdog");
         watchdog.start();
+    }
+
+    /*
+     * The captured sound goes to the car inside the video, and Android also keeps playing it on the phone
+     * (speaker or Bluetooth). Muting the phone's media volume silences only the phone: playback capture
+     * records at full volume. On the rare phone where muting would also silence the capture, the watchdog
+     * notices (media playing but only silence captured) and turns the phone's sound back on.
+     */
+    private void mutePhone() {
+        try {
+            sound = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (sound.isStreamMute(AudioManager.STREAM_MUSIC)) return; // already muted by the user: leave it alone
+            sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
+            muted = true;
+            mutedAt = System.currentTimeMillis();
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void unmutePhone() {
+        if (!muted) return;
+        muted = false;
+        try {
+            sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private void checkMute(long now) {
+        AudioCapture a = audio;
+        if (!muted || a == null || now - mutedAt < 6000) return;
+        if (sound.isMusicActive() && now - Math.max(a.lastSound(), mutedAt) > 6000) main.post(this::unmutePhone);
     }
 
     private void startForegroundNotice() {
@@ -158,6 +198,7 @@ public class MirrorService extends Service {
         if (watchdog != null) watchdog.interrupt();
         if (stream != null) stream.close();
         if (audio != null) audio.stop();
+        unmutePhone();
         if (encoder != null) encoder.stop();
         if (url != null && server != null) server.remove(url);
         if (projection != null) {

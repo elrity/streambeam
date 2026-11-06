@@ -8,8 +8,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="StreamBeam">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/favicon-64.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <!-- APP-START -->
 <title>StreamBeam</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -463,7 +463,7 @@ const S = {
   m3u: store.get('m3u', SAMPLE_M3U),
   group: 'All', chSearch: '',
   local: [],
-  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
+  settings: Object.assign({ autoplay: true, skip: 10, subSize: 'Medium', resume: true, demo: false, quality: 'Auto', vlcFallback: true, vlcBridge: '', autoConnect: true, mirrorSound: true, mirrorMute: true, city: '', region: '', units: '', geminiKey: '', geminiModel: 'gemini-2.5-flash' }, store.get('settings', {})),
   scanning: false
 };
 /* Devices saved by older versions (fixed demo ids) or demo screens after demo mode is off */
@@ -851,11 +851,11 @@ const GUIDES = [
    or the viewer's own key. Without either, a tile copies its prompt and opens Gemini. */
 const GM = { server: false, model: '', busy: '', answer: null, err: '', loc: '' };
 const LOCALE = navigator.language || 'en-US';
-const REGION = (LOCALE.split('-')[1] || 'US').toUpperCase();
+const REGION = 'EG'; // Egypt by default everywhere (news, weather, IPTV); Settings → Today can change it
 const countryName = code => { try { return new Intl.DisplayNames([LOCALE], { type: 'region' }).of(code) || code; } catch { return code; } };
 const todayStr = () => new Date().toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 const useF = () => (S.settings.units || (['US', 'LR', 'MM'].includes(REGION) ? 'F' : 'C')) === 'F';
-const place = () => S.settings.city || GM.loc || '';
+const place = () => S.settings.city || GM.loc || 'Cairo';
 const country = () => countryName(S.settings.region || REGION);
 const TILES = [
   { id: 'news', label: 'Top news', sub: 'World and national headlines', icon: 'news',
@@ -877,6 +877,14 @@ const TILES = [
 ];
 const SYSTEM = 'You are a daily briefing assistant inside a TV casting app. Be concise and factual, use Google Search for anything current, and give dates and numbers. Use "- " bullets and **bold** sparingly. No preamble and no closing offer.';
 
+/* Opens the phone's own assistant (Gemini, Google Assistant, Bixby…) in the app, else Gemini on the web.
+   A question, if any, is copied first so it can be pasted or spoken there. */
+function openAssistant(q) {
+  if (q) navigator.clipboard.writeText(q).catch(() => {});
+  const web = () => { const a = document.createElement('a'); a.href = 'https://gemini.google.com/app'; a.target = '_blank'; a.rel = 'noopener'; a.click(); };
+  if (q) toast('Question copied. Paste it in your assistant.');
+  if (N.on) ncall('assistant').catch(web); else web();
+}
 async function geminiStatus() {
   if (!location.protocol.startsWith('http')) return;
   try { const r = await fetch('gemini/status', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); GM.server = !!j.enabled; GM.model = j.model || ''; } } catch {}
@@ -1287,10 +1295,11 @@ function updateConn() {
   const c = $('#conn'); if (!c) return;
   const dev = curDev(), local = S.device === 'local';
   const title = dev ? dev.name : local ? 'This device' : 'Connect';
-  const sub = N.mirror.state === 'live' ? 'Mirroring your screen' : dev ? (dev.away ? 'Searching…' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : N.on ? 'Find a screen' : 'Choose a screen';
-  c.className = 'connect' + (dev || local ? ' on' : '');
+  const away = dev?.away && N.mirror.state !== 'live';
+  const sub = N.mirror.state === 'live' ? 'Mirroring your screen' : dev ? (away ? 'Not connected · waiting for it' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : N.on ? 'Find a screen' : 'Choose a screen';
+  c.className = 'connect' + ((dev && !away) || local ? ' on' : '');
   c.innerHTML = `<span class="c-title">${esc(title)}</span><span class="c-sub">${esc(sub)}</span>`;
-  const label = dev || local ? `Connected to ${title}. Change screen` : 'Connect a screen';
+  const label = (dev && !away) || local ? `Connected to ${title}. Change screen` : 'Connect a screen';
   c.setAttribute('aria-label', label); $('#dialBtn')?.setAttribute('aria-label', label);
 }
 setInterval(() => {
@@ -1512,8 +1521,9 @@ const views = {
       ? `<button class="tile" data-ask="${t.id}" aria-busy="${GM.busy === t.id}">${icon(t.icon)}<b>${esc(t.label)}</b></button>`
       : `<a class="tile" href="https://gemini.google.com/app" target="_blank" rel="noopener" data-copyask="${t.id}">${icon(t.icon)}<b>${esc(t.label)}</b></a>`;
     const a = GM.answer;
-    return `<form id="askForm" class="field" autocomplete="off">${icon('spark')}<input id="askInput" placeholder="Ask Gemini" aria-label="Ask Gemini" enterkeyhint="send"><button class="round sm acc" type="submit" aria-label="Ask" style="width:34px;height:34px">${icon('next')}</button></form>
-      <div class="field">${icon('pin')}<input id="tCity" value="${esc(S.settings.city)}" placeholder="${GM.loc ? 'Using your location' : 'Your city'}" aria-label="Your city"><button class="btn flat sm" type="button" data-act="locate">Locate</button></div>
+    const spark = N.on ? `<button class="round sm" type="button" data-act="assistant" aria-label="Open your phone’s assistant" title="Your phone’s assistant" style="width:34px;height:34px">${icon('spark')}</button>` : icon('spark');
+    return `<form id="askForm" class="field" autocomplete="off">${spark}<input id="askInput" placeholder="Ask Gemini" aria-label="Ask Gemini" enterkeyhint="send"><button class="round sm acc" type="submit" aria-label="Ask" style="width:34px;height:34px">${icon('next')}</button></form>
+      <div class="field">${icon('pin')}<input id="tCity" value="${esc(S.settings.city)}" placeholder="${GM.loc ? 'Using your location' : 'Cairo'}" aria-label="Your city"><button class="btn flat sm" type="button" data-act="locate">Locate</button></div>
       ${GM.err ? `<div class="note warn">${esc(GM.err)}</div>` : ''}
       ${a ? `<section class="panel answer" aria-live="polite">
         <div style="display:flex;align-items:center;gap:10px"><span class="label" style="flex:1">${esc(a.label)}</span>
@@ -1522,7 +1532,7 @@ const views = {
         ${a.sources?.length ? `<div class="sources">${a.sources.slice(0, 8).map(x => `<a href="${esc(x.uri)}" target="_blank" rel="noopener" title="${esc(x.title)}">${esc(x.title)}</a>`).join('')}</div>` : ''}
       </section>` : ''}
       <div class="tiles">${TILES.map(tile).join('')}</div>
-      ${ready ? '' : '<div class="note">Tiles open Gemini with the question copied. <div class="acts"><button class="btn sm" data-act="geminiSetup">Add a Gemini key for answers here</button></div></div>'}`;
+      ${ready ? '' : `<div class="note">Tiles open ${N.on ? 'your phone’s assistant' : 'Gemini'} with the question copied. <div class="acts"><button class="btn sm" data-act="geminiSetup">Add a Gemini key for answers here</button></div></div>`}`;
   },
 
   library() {
@@ -1559,7 +1569,8 @@ const views = {
         <div class="set"><span>VLC server<span class="sub">Address of server.mjs, for Cast to VLC.</span></span>${txt('s-vlcBridge', st.vlcBridge, 'http://192.168.1.10:8090')}</div>
         <div class="set"><span>Reconnect to my car or TV<span class="sub">When it appears on the Wi-Fi</span></span>${sw('s-autoConnect', st.autoConnect)}</div>
         <div class="set"><span>Phone sound in mirroring<span class="sub">Plays through the car with the picture</span></span>${sw('s-mirrorSound', st.mirrorSound)}</div>
-        <div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div></details>
+        <div class="set"><span>Mute the phone while mirroring<span class="sub">Sound only from the car</span></span>${sw('s-mirrorMute', st.mirrorMute)}</div>
+        ${N.on ? '' : `<div class="set"><span>Demo screens</span>${sw('s-demo', st.demo)}</div>`}</details>
       <div class="label" style="text-align:center">StreamBeam${N.on ? ' · App' : ''}</div>`;
   }
 };
@@ -1772,6 +1783,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.ask) return ask(b.dataset.ask);
   if (b.dataset.copyask) {
     const t = TILES.find(x => x.id === b.dataset.copyask);
+    if (N.on) { e.preventDefault(); openAssistant(t.prompt()); return; }
     navigator.clipboard.writeText(t.prompt()).then(() => toast('Question copied. Paste it in Gemini.'), () => toast('Ask Gemini: ' + t.label));
     return;
   }
@@ -1805,6 +1817,7 @@ document.addEventListener('click', async e => {
     case 'mute': P.muted = !P.muted; video.muted = P.muted; if (ytOn()) P.muted ? Y.player.mute() : Y.player.unMute(); extCmd('volume', P.muted ? 0 : P.vol); render(); break;
     case 'vlc': openVlcSheet(ctx.item || P.item); break;
     case 'openToday': go('today'); break;
+    case 'assistant': openAssistant(); break;
     case 'geminiSetup': S.setOpen = 'Today'; go('settings'); $('#s-geminiKey')?.focus(); break;
     case 'locate': locate(); break;
     case 'speak': speak(); break;
@@ -1831,7 +1844,7 @@ document.addEventListener('click', async e => {
       if (!d || !S.device.startsWith('n:dlna:')) { toast('Pick the car screen first'); openDevices(); break; }
       if (P.item) stop();
       N.mirror = { state: 'starting', at: 0 }; render();
-      ncall('mirrorStart', { deviceId: S.device.slice(2), sound: S.settings.mirrorSound })
+      ncall('mirrorStart', { deviceId: S.device.slice(2), sound: S.settings.mirrorSound, mute: S.settings.mirrorMute })
         .then(() => { N.mirror = { state: 'live', at: Date.now() }; toast('Mirroring to ' + d.name); render(); })
         .catch(err => { N.mirror = { state: '', at: 0 }; toast(err.message); render(); });
       break;
@@ -1892,7 +1905,7 @@ document.addEventListener('submit', e => {
   if (e.target.id === 'askForm') {
     e.preventDefault(); const q = $('#askInput').value.trim(); if (!q) return;
     if (geminiReady()) ask(null, q);
-    else { navigator.clipboard.writeText(q).catch(() => {}); GM.err = ''; toast('Question copied. Opening Gemini.'); const a = document.createElement('a'); a.href = 'https://gemini.google.com/app'; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+    else { GM.err = ''; openAssistant(q); }
   }
 });
 document.addEventListener('input', e => {

@@ -62,7 +62,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
     private String mirrorDevice;
     private boolean mirrorStoppedByPage;
     private String relayUrl;
-    private boolean mirrorSound;
+    private boolean mirrorSound, mirrorMute;
     private final java.util.concurrent.ExecutorService net = Executors.newCachedThreadPool();
 
     Bridge(Activity activity) {
@@ -145,6 +145,7 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 pickFiles(id);
                 break;
             case "mirrorStart":
+                mirrorMute = a.optBoolean("mute", true);
                 startMirror(id, a.getString("deviceId"), a.optBoolean("sound", true));
                 break;
             case "mirrorStop":
@@ -188,6 +189,10 @@ class Bridge implements WebViewCompat.WebMessageListener {
             case "theme":
                 applyTheme(a.optBoolean("dark"), a.optString("top", "#D9DADE"), a.optString("bottom", "#FCFCFD"));
                 done.ok();
+                break;
+            case "assistant":
+                if (openAssistant()) done.ok();
+                else done.fail("No assistant app was found on this phone.");
                 break;
             case "openCastSettings":
                 openCastSettings();
@@ -285,7 +290,8 @@ class Bridge implements WebViewCompat.WebMessageListener {
         Intent service = new Intent(activity, MirrorService.class)
                 .putExtra(MirrorService.EXTRA_CODE, resultCode)
                 .putExtra(MirrorService.EXTRA_DATA, data)
-                .putExtra(MirrorService.EXTRA_SOUND, mirrorSound);
+                .putExtra(MirrorService.EXTRA_SOUND, mirrorSound)
+                .putExtra(MirrorService.EXTRA_MUTE, mirrorMute);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.startForegroundService(service);
         else activity.startService(service);
     }
@@ -454,6 +460,38 @@ class Bridge implements WebViewCompat.WebMessageListener {
             flags = dark ? flags & ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : flags | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
         decor.setSystemUiVisibility(flags);
+    }
+
+    /**
+     * Opens the phone's default assistant (Gemini, Google Assistant, Bixby…): first the app chosen in
+     * Settings → Default apps → Digital assistant, then whatever answers the standard assist or voice actions.
+     */
+    private boolean openAssistant() {
+        String pkg = null;
+        try {
+            String chosen = Settings.Secure.getString(activity.getContentResolver(), "assistant");
+            if (chosen == null || chosen.isEmpty()) chosen = Settings.Secure.getString(activity.getContentResolver(), "voice_interaction_service");
+            if (chosen != null && chosen.contains("/")) pkg = chosen.substring(0, chosen.indexOf('/'));
+        } catch (RuntimeException ignored) {
+        }
+        List<Intent> tries = new ArrayList<>();
+        if (pkg != null) {
+            tries.add(new Intent(Intent.ACTION_ASSIST).setPackage(pkg));
+            tries.add(new Intent(Intent.ACTION_VOICE_COMMAND).setPackage(pkg));
+            Intent launch = activity.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (launch != null) tries.add(launch);
+        }
+        tries.add(new Intent(Intent.ACTION_ASSIST));
+        tries.add(new Intent(Intent.ACTION_VOICE_COMMAND));
+        tries.add(new Intent(Intent.ACTION_MAIN).setPackage("com.google.android.apps.bard"));
+        for (Intent i : tries) {
+            try {
+                activity.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return true;
+            } catch (ActivityNotFoundException | SecurityException ignored) {
+            }
+        }
+        return false;
     }
 
     private void openCastSettings() {

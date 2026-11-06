@@ -42,7 +42,8 @@ const FILES = {
   '/index.html': ['index.html', 'text/html; charset=utf-8', 'no-cache'],
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json', 'no-cache'],
   '/sw.js': ['sw.js', 'text/javascript; charset=utf-8', 'no-cache'],
-  '/icons/icon.svg': ['icons/icon.svg', 'image/svg+xml', 'public, max-age=604800'],
+  '/icons/favicon-64.png': ['icons/favicon-64.png', 'image/png', 'public, max-age=604800'],
+  '/icons/apple-touch-icon.png': ['icons/apple-touch-icon.png', 'image/png', 'public, max-age=604800'],
   '/icons/icon-192.png': ['icons/icon-192.png', 'image/png', 'public, max-age=604800'],
   '/icons/icon-512.png': ['icons/icon-512.png', 'image/png', 'public, max-age=604800'],
   '/icons/icon-maskable-512.png': ['icons/icon-maskable-512.png', 'image/png', 'public, max-age=604800']

@@ -58,6 +58,7 @@ class Dlna {
     static final class Device {
         String id, name, model, host, location, avUrl, avType, rcUrl, rcType;
         volatile long seen;
+        volatile int misses;
     }
 
     private final Bridge bridge;
@@ -72,10 +73,58 @@ class Dlna {
     private volatile boolean userStopped, sawPlaying;
     private volatile double pendingSeek;
     private int failures;
+    private volatile boolean checking;
 
     Dlna(Context context, Bridge bridge) {
         this.bridge = bridge;
         this.wifi = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        // A screen that is switched off (the car turned off) sends no goodbye: check every known screen
+        // regularly and forget one that stops answering, so the app never says "Connected" to nothing.
+        poller.scheduleWithFixedDelay(() -> {
+            if (checking || found.isEmpty()) return;
+            checking = true;
+            io.execute(() -> {
+                try {
+                    checkPresence();
+                } finally {
+                    checking = false;
+                }
+            });
+        }, 8, 8, TimeUnit.SECONDS);
+    }
+
+    private void checkPresence() {
+        boolean changed = false;
+        for (Device d : found.values()) {
+            if (answers(d.location)) {
+                d.misses = 0;
+                d.seen = System.currentTimeMillis();
+            } else if (++d.misses >= 2 && found.remove(d.id) != null) {
+                changed = true;
+                if (d == active) {
+                    stopPolling();
+                    active = null;
+                }
+                bridge.session(d.id, "ended", "Lost the connection to " + d.name + ".");
+            }
+        }
+        if (changed) bridge.devicesChanged();
+    }
+
+    /** Whether the screen still answers on its description address (any HTTP reply counts). */
+    private static boolean answers(String location) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(location).openConnection();
+            c.setConnectTimeout(3000);
+            c.setReadTimeout(3000);
+            c.setRequestMethod("GET");
+            return c.getResponseCode() > 0;
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 
     boolean has(String device) {
