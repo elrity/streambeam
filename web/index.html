@@ -103,7 +103,8 @@ textarea { width: 100%; min-height: 140px; resize: vertical; padding: 14px; bord
 .emblem .prog[stroke-dasharray^="0 "] { visibility: hidden; }
 .emblem .prog { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray .5s; }
 .emblem .word { fill: var(--fg); font: 400 38px/1 var(--f-ui); letter-spacing: 12px; }
-.emblem .time { fill: var(--fg); font: 200 64px/1 var(--f-ui); }
+.emblem .time { fill: var(--fg); font: 200 60px/1 var(--f-ui); }
+.emblem .time .ampm { font-size: 22px; font-weight: 400; letter-spacing: 1px; }
 .emblem-btn:active .disc { filter: drop-shadow(6px 8px 8px var(--lo)); }
 .connect { display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; text-align: center; }
 .c-title { position: relative; max-width: 84vw; font: 200 clamp(26px, 4.4vh, 38px)/1.1 var(--f-ui); letter-spacing: .06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: .5em; }
@@ -261,6 +262,14 @@ kbd { font: 500 11px/1 var(--f-mono); padding: 2px 6px; border-radius: 6px; box-
 .idle .inow { margin-top: 18px; font-size: 15px; color: #c9cacd; max-width: 80vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .idle .ihint { margin-top: 26px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #55575c; }
 select.btn { appearance: none; -webkit-appearance: none; border: 0; font: inherit; font-size: 14px; color: var(--fg); text-align: center; }
+.cont { display: flex; gap: 12px; overflow-x: auto; padding: 4px 18px 6px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.cont::-webkit-scrollbar { display: none; }
+.cw { flex: 0 0 112px; display: grid; gap: 5px; text-align: left; scroll-snap-align: start; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.cw-img { width: 112px; height: 64px; border-radius: 12px; background: var(--disc-b) center/cover no-repeat; display: grid; place-items: center; font-weight: 600; color: var(--fg); box-shadow: 4px 5px 10px var(--lo), -3px -3px 8px var(--hi); }
+.cw-bar { height: 3px; border-radius: 2px; background: var(--lo); overflow: hidden; }
+.cw-bar i { display: block; height: 100%; background: var(--warm); }
+.cw-t { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cw-s { font-size: 11px; color: var(--muted, #8a8c92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -3px; }
 .toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); padding: 12px 20px; border-radius: 14px; background: var(--sheet); box-shadow: 0 8px 24px var(--lo); font-size: 14px; text-align: center; }
 
 /* Landscape and short screens: side by side, tighter */
@@ -725,17 +734,24 @@ function stop() {
 }
 function next() {
   const n = S.queue.shift();
-  if (n) { save(); playItem(n, { from: 0 }); } else { toast('Queue is empty'); }
+  if (n) { save(); playItem(n, { from: 0 }); return; }
+  if (P.item?.ser) {
+    const cur = P.item; logHistory(P.dur || P.pos);
+    nextEpisode(cur).then(e => e ? (toast('Next: ' + e.title), playItem(e, { from: 0 })) : toast('That was the last episode'))
+      .catch(() => toast('Couldn’t load the next episode'));
+    return;
+  }
+  toast('Queue is empty');
 }
 function onEnded() {
   logHistory(0);
-  if (S.settings.autoplay && S.queue.length) next();
+  if (S.settings.autoplay && hasNext()) next();
   else { P.playing = false; P.pos = P.dur; render(); }
 }
 function logHistory(posOverride) {
   if (!P.item) return;
   const pos = posOverride ?? P.pos;
-  S.history = [{ ...P.item, at: Date.now(), pos }, ...S.history.filter(h => h.url !== P.item.url)].slice(0, 60);
+  S.history = [{ ...P.item, at: Date.now(), pos, dur: P.live ? 0 : P.dur || P.item.dur || 0 }, ...S.history.filter(h => h.url !== P.item.url)].slice(0, 80);
   save();
 }
 let lastHist = 0;
@@ -1080,9 +1096,9 @@ function xItem(a, kind, x) {
   const b = xbase(a), u = encodeURIComponent(a.user), p = encodeURIComponent(a.pass);
   if (kind === 'live') return { id: 'x' + x.stream_id, title: x.name || 'Channel', logo: x.stream_icon, live: true, res: 'Live', duration: 0,
     url: `${b}/live/${u}/${p}/${x.stream_id}.m3u8`, tsUrl: `${b}/live/${u}/${p}/${x.stream_id}.ts` };
-  if (kind === 'movie') return { id: 'm' + x.stream_id, title: x.name || 'Movie', logo: x.stream_icon, res: x.rating ? '★ ' + x.rating : '', duration: 0,
+  if (kind === 'movie') return { id: 'm' + x.stream_id, title: x.name || 'Movie', logo: x.stream_icon, res: x.rating ? '★ ' + x.rating : '', duration: 0, tv: a.id,
     url: `${b}/movie/${u}/${p}/${x.stream_id}.${x.container_extension || 'mp4'}` };
-  return { id: 'e' + x.id, title: x.title || 'Episode', logo: x.info?.movie_image, res: '', duration: +x.info?.duration_secs || 0,
+  return { id: 'e' + x.id, title: x.title || 'Episode', logo: x.info?.movie_image, res: '', duration: +x.info?.duration_secs || 0, tv: a.id,
     url: `${b}/series/${u}/${p}/${x.id}.${x.container_extension || 'mp4'}` };
 }
 async function addAccount(form) {
@@ -1228,21 +1244,34 @@ const SECTIONS = [
   ['today', 'Today', 'spark'], ['library', 'Library', 'lib'], ['settings', 'Settings', 'gear']
 ];
 const TITLES = Object.fromEntries(SECTIONS.map(([v, l]) => [v, l]));
+/* Every step (section, IPTV list, category, series) is a history entry, so Back — the header arrow or the
+   phone's back — goes back one step at a time, and only the last step returns home. */
 let depth = 0;
+function push(view, tv) {
+  depth++;
+  try { history.pushState({ sb: view, tv: tv || null, d: depth }, '', '#' + view); } catch {}
+}
 function go(view) {
   if (view === S.view || !(view in TITLES)) return;
-  try { if (S.view === 'home') { history.pushState({ sb: view }, '', '#' + view); depth = 1; } else history.replaceState({ sb: view }, '', '#' + view); } catch {}
   if (view === 'iptv') { S.tv = { tab: 'home' }; S.chSearch = ''; } // IPTV always opens on its dashboard
+  push(view, view === 'iptv' ? S.tv : null);
   S.view = view; render();
 }
+function tvGo(tv) { S.tv = tv; S.chSearch = ''; push('iptv', tv); render(); }
+function tvSet(tv) { S.tv = tv; try { history.replaceState({ ...(history.state || {}), tv }, ''); } catch {} render(); }
 function setView(v) { if (S.view !== v) go(v); }
 function goHome() {
   if (depth > 0) { history.back(); return; }
   S.view = 'home';
-  try { history.replaceState({ sb: 'home' }, '', location.pathname + location.search); } catch {}
+  try { history.replaceState({ sb: 'home', d: 0 }, '', location.pathname + location.search); } catch {}
   render();
 }
-addEventListener('popstate', e => { S.view = e.state?.sb || 'home'; depth = S.view === 'home' ? 0 : 1; render(); });
+addEventListener('popstate', e => {
+  const st = e.state || {};
+  S.view = st.sb || 'home'; depth = S.view === 'home' ? 0 : st.d || 1;
+  if (S.view === 'iptv' && st.tv) { S.tv = st.tv; S.chSearch = ''; }
+  render();
+});
 
 /* ---------- Rendering ---------- */
 const main = $('#main');
@@ -1270,7 +1299,10 @@ const A = {
   vlc: m => NEEDS_VLC.includes(fmtOf(m.url)) ? `<button class="round sm" data-act="vlc" aria-label="Open in VLC">${icon('vlc')}</button>` : ''
 };
 const both = m => A.vlc(m) + A.queue() + A.cast();
-const clockStr = () => new Date().toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+/* 12-hour clock with AM/PM everywhere in the app */
+const timeStr = (d = new Date()) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+const clockStr = () => timeStr();
+const ringTime = () => { const [t, ap] = timeStr().split(' '); return `${t}<tspan class="ampm" dx="6">${ap || ''}</tspan>`; };
 const dateStr = () => new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
 
 function homeView() {
@@ -1295,8 +1327,8 @@ function emblemSvg() {
     <defs><linearGradient id="discFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--disc-a)"/><stop offset="1" style="stop-color:var(--disc-b)"/></linearGradient>
       <radialGradient id="glint"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="#ffd27d" stop-opacity=".85"/><stop offset="1" stop-color="#ff9a3c" stop-opacity="0"/></radialGradient></defs>
     <circle class="disc" cx="200" cy="200" r="128"/>
-    ${logo ? `<image href="icons/logo.webp" x="70" y="70" width="260" height="260"/>`
-      : `<circle class="line" cx="200" cy="200" r="130"/><text class="time" id="eTime" x="200" y="222" text-anchor="middle">${clockStr()}</text>`}
+    ${logo ? `<image href="icons/logo.webp?v=2" x="70" y="70" width="260" height="260"/>`
+      : `<circle class="line" cx="200" cy="200" r="130"/><text class="time" id="eTime" x="200" y="222" text-anchor="middle">${ringTime()}</text>`}
     <path class="prog" id="eProg" d="${logo ? LOGO_ARC : EM_ARC}" pathLength="100" stroke-dasharray="0 100"/>
     ${logo ? '' : '<circle cx="110" cy="108" r="16" fill="url(#glint)"/>'}
   </svg>`;
@@ -1317,13 +1349,13 @@ setInterval(() => {
   const t = fmt((Date.now() - N.mirror.at) / 1000);
   [['#nmTime', t], ['#mMini', t]].forEach(([q, v]) => { const n = $(q); if (n) n.textContent = v; });
 }, 1000);
-setInterval(() => { const c = $('#clock'); if (c) c.textContent = clockStr(); const e = $('#eTime'); if (e) e.textContent = clockStr(); }, 10000);
+setInterval(() => { const c = $('#clock'); if (c) c.textContent = clockStr(); const e = $('#eTime'); if (e) e.innerHTML = ringTime(); }, 10000);
 
 function sectionView(v) {
   const dev = curDev();
   const sub = v === 'player' ? (dev ? dev.name : S.device === 'local' ? 'This device' : '') : v === 'today' ? dateStr() : '';
   const right = ['player', 'mirror', 'settings'].includes(v) ? '' : `<button class="round sm" data-act="devices" aria-label="Choose a screen">${icon('cast')}</button>`;
-  return `<div class="view"><div class="head"><button class="round sm" data-act="home" aria-label="Back to home">${icon('left')}</button>
+  return `<div class="view"><div class="head"><button class="round sm" data-act="home" aria-label="Back">${icon('left')}</button>
     <div class="grow"><h1>${TITLES[v]}</h1>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>${right}</div>
     <div class="scroll"><div class="inner">${views[v]()}</div></div></div>`;
 }
@@ -1353,8 +1385,18 @@ function tvHome(a) {
     <div class="grid" style="width:100%;height:auto;padding:4px 2px">
       ${a.kind === 'xtream' ? tile('tvLive', 'tv', 'Live TV') + tile('tvMovies', 'play', 'Movies') + tile('tvSeries', 'list', 'Series') : tile('tvLive', 'tv', 'Channels')}
       ${tile('tvFree', 'globe', 'Free TV')}${tile('tvSearch', 'search', 'Search')}${tile('tvAdd', 'plus', 'Add')}</div>
+    ${tvContinue()}
     ${S.tv.accounts ? `<section class="panel">${S.accounts.map(x => `<div class="row" style="grid-template-columns:minmax(0,1fr) auto"><div class="meta"><div class="t">${esc(x.name)}${x.id === S.acc ? ' ·' : ''}</div><div class="s"><span>${x.kind === 'm3u' ? 'M3U' : 'Xtream'}</span></div></div>
         <div class="acts"><button class="round sm" data-act="tvRemove" data-acc="${x.id}" aria-label="Remove">${icon('x')}</button>${x.id === S.acc ? '' : `<button class="round sm acc" data-act="tvUse" data-acc="${x.id}" aria-label="Use">${icon('play')}</button>`}</div></div>`).join('')}</section>` : ''}`;
+}
+/* Movies and episodes started from IPTV and not finished, newest first: tap to carry on where you stopped. */
+function tvContinue() {
+  const list = S.history.filter(h => h.tv && !h.live && h.pos > 30 && !(h.dur && h.pos > h.dur - 60)).slice(0, 12);
+  if (!list.length) return '';
+  return `<section class="panel" style="padding:14px 0 12px"><div class="panel-t" style="padding:0 18px 8px"><span class="label">Continue watching</span><div class="grow"></div><button class="btn flat sm" data-act="tvClearCont">Clear</button></div>
+    <div class="cont">${list.map(h => `<button class="cw" data-resume="${esc(h.url)}"><span class="cw-img" style="${h.logo ? `background-image:url('${esc(h.logo)}')` : softBg(h.show || h.title)}">${h.logo ? '' : esc(initials(h.show || h.title))}</span>
+      <span class="cw-bar"><i style="width:${h.dur ? Math.min(100, h.pos / h.dur * 100) : 50}%"></i></span>
+      <span class="cw-t">${esc(h.show || h.title)}</span><span class="cw-s">${esc(h.show ? (h.ser?.season ? 'S' + h.ser.season + ' · ' : '') + h.title : h.dur ? fmt(h.dur - h.pos) + ' left' : fmt(h.pos))}</span></button>`).join('')}</div></section>`;
 }
 function tvBrowse(a, t) {
   const kind = t === 'live' ? 'live' : t === 'movies' ? 'movie' : t === 'series' ? 'series' : 'search';
@@ -1393,13 +1435,29 @@ function tvBrowse(a, t) {
       : shown.map((i, n) => `<button class="row" data-xi="${n}" style="width:100%;text-align:left">${thumb(i.logo ? i : { ...i, url: '' })}<div class="meta"><div class="t">${esc(i.title)}</div><div class="s">${i.series ? '<span>Series</span>' : `<span>${i.live ? 'Live' : esc(fmtOf(i.url))}</span>${i.res ? `<span>${esc(i.res)}</span>` : ''}`}</div></div><span class="round sm acc">${icon(i.series ? 'list' : 'play')}</span></button>`).join('') || '<div class="empty">Nothing here.</div>'}
       ${items && items.length > shown.length && kind !== 'search' ? `<div class="empty">Showing ${shown.length} of ${items.length}. Search to find more.</div>` : ''}</div></section>`;
 }
+/* An episode remembers its series, so ⏭ can play the next one (and the next season after the last). */
+function episodeItem(a, info, id, season, e) {
+  const show = info.info?.name || '';
+  return { ...xItem(a, 'episode', e), title: `${e.episode_num ? e.episode_num + '. ' : ''}${e.title || 'Episode'}`, show, ser: { id, season: String(season) }, logo: e.info?.movie_image || info.info?.cover };
+}
+function allEpisodes(a, info, id) {
+  return Object.keys(info.episodes || {}).sort((x, y) => x - y).flatMap(n => asList(info.episodes[n]).map(e => episodeItem(a, info, id, n, e)));
+}
+const hasNext = () => S.queue.length > 0 || !!P.item?.ser;
+async function nextEpisode(item) {
+  const a = S.accounts.find(x => x.id === item.tv); if (!a || !item.ser) return null;
+  const k = a.id + ':series:' + item.ser.id;
+  const info = XT.data[k] || (XT.data[k] = await xjson(a, 'get_series_info', '&series_id=' + encodeURIComponent(item.ser.id)));
+  const all = allEpisodes(a, info, item.ser.id), i = all.findIndex(e => e.url === item.url);
+  return i >= 0 ? all[i + 1] || null : null;
+}
 function tvSeries(a) {
   const id = S.tv.series;
   const info = xget('series:' + id, x => xjson(x, 'get_series_info', '&series_id=' + encodeURIComponent(id)));
   if (!info) return xerr('series:' + id) ? `<div class="note warn">${esc(xerr('series:' + id))}</div>` : '<div class="empty"><i class="spin" style="display:inline-block;vertical-align:middle"></i> Loading…</div>';
   const seasons = Object.keys(info.episodes || {}).sort((x, y) => x - y);
   const season = S.tv.season && seasons.includes(S.tv.season) ? S.tv.season : seasons[0];
-  const eps = asList((info.episodes || {})[season]).map(e => ({ ...xItem(a, 'episode', e), title: `${e.episode_num ? e.episode_num + '. ' : ''}${e.title || 'Episode'}` }));
+  const eps = asList((info.episodes || {})[season]).map(e => episodeItem(a, info, id, season, e));
   XT.shown = eps;
   return `<div class="np-title">${esc(info.info?.name || '')}</div>
     <div class="chips">${seasons.map(n => `<button class="chip" data-act="tvSeason" data-season="${esc(n)}" aria-pressed="${n === season}">Season ${esc(n)}</button>`).join('')}</div>
@@ -1436,7 +1494,7 @@ const views = {
         <button class="round" data-act="back" aria-label="Back ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('back')}</button>
         <button class="round sm" data-act="stop" aria-label="Stop" ${!it ? 'disabled' : ''}>${icon('stop')}</button>
         <button class="round big" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}" ${!it ? 'disabled' : ''}>${icon(P.playing ? 'pause' : 'play')}</button>
-        <button class="round sm" data-act="next" aria-label="Next in queue" ${!S.queue.length ? 'disabled' : ''}>${icon('next')}</button>
+        <button class="round sm" data-act="next" aria-label="${P.item?.ser && !S.queue.length ? 'Next episode' : 'Next in queue'}" ${!hasNext() ? 'disabled' : ''}>${icon('next')}</button>
         <button class="round" data-act="fwd" aria-label="Forward ${S.settings.skip} seconds" ${!it ? 'disabled' : ''}>${icon('fwd')}</button></div>
       <div class="volrow"><button class="round sm" data-act="mute" aria-label="${P.muted ? 'Unmute' : 'Mute'}" aria-pressed="${P.muted}">${icon(P.muted ? 'mute' : 'vol')}</button>
         <input type="range" id="vol" min="0" max="100" value="${P.muted ? 0 : Math.round(P.vol * 100)}" style="--p:${P.muted ? 0 : P.vol * 100}%" aria-label="Volume"></div>
@@ -1494,7 +1552,7 @@ const views = {
 
   iptv() {
     const a = acct(), t = S.tv.tab;
-    const back = `<button class="chip" data-act="tvHome" style="align-self:flex-start">‹ IPTV</button>`;
+    const back = `<button class="chip" data-act="tvHome" style="align-self:flex-start">‹ Back</button>`;
     if (t === 'free') return back + views.iptvFree();
     if (!a || t === 'login') return tvLogin();
     if (t === 'home') return tvHome(a);
@@ -1690,7 +1748,7 @@ function renderMini() {
   m.innerHTML = `<div class="ring">${thumb(it)}<svg viewBox="0 0 50 50" aria-hidden="true"><rect id="miniRing" x="1.5" y="1.5" width="47" height="47" rx="14" pathLength="100" stroke-dasharray="0 100"/></svg></div>
     <div class="meta" data-act="openPlayer"><div class="t">${esc(it.title)}</div><div class="s"><span id="miniTime"></span><span>${esc(devName())}</span></div></div>
     <button class="round sm acc" data-act="toggle" aria-label="${P.playing ? 'Pause' : 'Play'}">${icon(P.playing ? 'pause' : 'play')}</button>
-    ${S.queue.length ? `<button class="round sm" data-act="next" aria-label="Next">${icon('next')}</button>` : ''}`;
+    ${hasNext() ? `<button class="round sm" data-act="next" aria-label="Next">${icon('next')}</button>` : ''}`;
   tick();
 }
 
@@ -1790,10 +1848,11 @@ function findItem(row) {
 const RATES = [1, 1.25, 1.5, 2, .5, .75];
 
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-xi],[data-ask],[data-copyask]');
+  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-xi],[data-ask],[data-copyask],[data-resume]');
   if (!b || scrim.contains(b)) return;
   if (b.dataset.go) return go(b.dataset.go);
   if (b.dataset.ask) return ask(b.dataset.ask);
+  if (b.dataset.resume) { const h = S.history.find(x => x.url === b.dataset.resume); if (h) playItem({ ...h, id: uid() }, { from: Math.max(0, h.pos - 5) }); return; }
   if (b.dataset.copyask) {
     const t = TILES.find(x => x.id === b.dataset.copyask);
     if (N.on) { e.preventDefault(); openAssistant(t.prompt()); return; }
@@ -1803,7 +1862,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
   if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(c, { from: 0 }); }
   if (b.dataset.group) { S.group = b.dataset.group; return render(); }
-  if (b.dataset.xi) { const it = XT.shown[+b.dataset.xi]; if (!it) return; if (it.series) { S.tv = { tab: 'series1', series: it.series }; return render(); } return playItem({ ...it, id: uid() }, { from: 0 }); }
+  if (b.dataset.xi) { const it = XT.shown[+b.dataset.xi]; if (!it) return; if (it.series) return tvGo({ tab: 'series1', series: it.series }); return playItem({ ...it, id: uid() }, { from: 0 }); }
   if (b.dataset.src) { S.iptvSrc = b.dataset.src; S.group = 'All'; S.chSearch = ''; TV.err = ''; render(); $('.scroll') && ($('.scroll').scrollTop = 0); return; }
   const act = b.dataset.act;
   const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
@@ -1881,13 +1940,13 @@ document.addEventListener('click', async e => {
     case 'unbookmark': S.bookmarks.splice(ctx.idx, 1); save(); render(); break;
     case 'openBm': go('browser'); browse(ctx.item.url); break;
     case 'm3uApply': S.m3u = $('#m3uText').value; S.group = 'All'; save(); toast(`${parseM3U(S.m3u).length} channels`); render(); break;
-    case 'tvHome': S.tv = { tab: 'home' }; XT.err = ''; S.chSearch = ''; render(); break;
-    case 'tvFree': S.tv = { tab: 'free' }; render(); break;
-    case 'tvLive': S.tv = { tab: 'live' }; S.chSearch = ''; render(); break;
-    case 'tvMovies': S.tv = { tab: 'movies' }; S.chSearch = ''; render(); break;
-    case 'tvSeries': S.tv = { tab: 'series' }; S.chSearch = ''; render(); break;
-    case 'tvSearch': S.tv = { tab: 'search' }; S.chSearch = ''; render(); $('#chSearch')?.focus(); break;
-    case 'tvAdd': S.tv = { tab: 'login' }; XT.err = ''; render(); break;
+    case 'tvHome': XT.err = ''; if (S.tv.tab !== 'home' && depth > 1) history.back(); else { S.tv = { tab: 'home' }; S.chSearch = ''; render(); } break;
+    case 'tvFree': tvGo({ tab: 'free' }); break;
+    case 'tvLive': tvGo({ tab: 'live' }); break;
+    case 'tvMovies': tvGo({ tab: 'movies' }); break;
+    case 'tvSeries': tvGo({ tab: 'series' }); break;
+    case 'tvSearch': tvGo({ tab: 'search' }); $('#chSearch')?.focus(); break;
+    case 'tvAdd': XT.err = ''; tvGo({ tab: 'login' }); break;
     case 'tvKind': XT.kind = b.dataset.kind; XT.err = ''; render(); break;
     case 'tvAccounts': S.tv = { ...S.tv, accounts: !S.tv.accounts }; render(); break;
     case 'tvUse': S.acc = b.dataset.acc; S.tv = { tab: 'home' }; save(); render(); break;
@@ -1896,7 +1955,8 @@ document.addEventListener('click', async e => {
       if (S.acc === b.dataset.acc) S.acc = S.accounts[0]?.id || '';
       S.tv = { tab: 'home', accounts: S.accounts.length > 0 }; save(); toast('Playlist removed'); render(); break;
     }
-    case 'tvSeason': S.tv = { ...S.tv, season: b.dataset.season }; render(); break;
+    case 'tvSeason': tvSet({ ...S.tv, season: b.dataset.season }); break;
+    case 'tvClearCont': S.history = S.history.filter(h => !h.tv || h.live); save(); render(); break;
     case 'tvRetry': { const a = acct(); if (a) Object.keys(XT.failed).filter(k => k.startsWith(a.id + ':')).forEach(k => delete XT.failed[k]); render(); break; }
     case 'iptvRetry': TV.err = ''; loadIptv(S.iptvSrc); break;
     case 'm3uSample': S.m3u = SAMPLE_M3U; S.group = 'All'; save(); render(); break;
@@ -1956,7 +2016,7 @@ document.addEventListener('change', async e => {
     save(); toast('Saved');
   }
   if (t.id === 'fileIn') addFiles(t.files);
-  if (t.id === 'tvCat') { S.tv = { ...S.tv, cat: t.value }; S.chSearch = ''; render(); }
+  if (t.id === 'tvCat') tvGo({ ...S.tv, cat: t.value });
   if (t.id === 'tCity') { S.settings.city = t.value.trim(); save(); }
   if (t.id === 'm3uFile' && t.files[0]) { $('#m3uText').value = await t.files[0].text(); }
 });
@@ -1984,7 +2044,7 @@ function idleDraw() {
   const el = $('#idle'); if (el.hidden) return;
   const now = new Date();
   el.innerHTML = `<div class="ibox" style="transform:translate(${(Math.random() * 40 - 20) | 0}px,${(Math.random() * 60 - 30) | 0}px)">
-    <img src="icons/logo.webp" alt=""><div class="iclock">${now.toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' })}</div>
+    <img src="icons/logo.webp?v=2" alt=""><div class="iclock">${timeStr(now)}</div>
     <div class="idate">${esc(now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }))}</div>
     ${P.item ? `<div class="inow">${esc(P.item.title || 'Playing')} · ${esc(devName())}</div>` : ''}
     <div class="ihint">Tap to wake</div></div>`;

@@ -1,6 +1,6 @@
 // StreamBeam service worker: keeps the app shell available offline.
 // Live data (/gemini, /vlc) and other sites' media always go to the network.
-const CACHE = 'streambeam-v3';
+const CACHE = 'streambeam-v4';
 const SHELL = ['./', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/favicon-64.png', 'icons/logo.webp'];
 
 self.addEventListener('install', e => {
