@@ -57,11 +57,22 @@ The web app knows it's this edition from the app (it adds `SBEdition/iptv` to
 the browser's user agent). To try it in a browser, open the app link with
 `?edition=iptv` (and `?edition=full` to go back).
 
+## RoomFit (furniture in your room)
+
+A separate web app in [`web/furniture/`](web/furniture/README.md): open the
+phone's camera and drag a real-size 3D chair, sofa or dining table into your
+room. It finds the floor and the walls, lights the furniture to match the room,
+and each piece stays where you put it while you walk around.
+
+**Open it:** https://elrity.github.io/streambeam/furniture/ (camera AR needs
+an Android phone with Chrome; any device can use the 3D room preview).
+
 ## What's in this repository
 
 | Folder | What it is |
 | --- | --- |
 | `web/` | The app (`index.html`, one file) and an optional Node server (`server.mjs`) for a shared Gemini key, an app password and casting to VLC. See [web/README.md](web/README.md). |
+| `web/furniture/` | RoomFit, the AR furniture app. See [web/furniture/README.md](web/furniture/README.md). |
 | `android/` | The Android app: hosts the app and adds real screen search and casting (Google Cast, DLNA). See [android/README.md](android/README.md). |
 | `.github/workflows/` | Publishes `web/` to GitHub Pages and builds the APK on every change. |
 | `render.yaml` | Optional: run the server on Render instead of GitHub Pages. |

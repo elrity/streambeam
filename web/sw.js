@@ -17,6 +17,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
   if (/\/(gemini|vlc)(\/|$)/.test(url.pathname)) return;
+  if (/\/furniture(\/|$)/.test(url.pathname)) return; // RoomFit has its own service worker
 
   // Pages: network first so updates arrive, cached shell when offline (shortcut URLs carry ?go=).
   if (e.request.mode === 'navigate') {
