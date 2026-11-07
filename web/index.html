@@ -1360,7 +1360,8 @@ function edHomeView() {
   return `<div class="view home">
     <div class="home-top"><span class="label">${APP_NAME}</span><span class="label" id="clock">${clockStr()}</span></div>
     <div class="home-body">
-      <div class="hero"><img class="ed-logo" src="icons/rity-iptv.webp" alt="${APP_NAME}"></div>
+      <div class="hero"><img class="ed-logo" src="icons/rity-iptv.webp" alt="${APP_NAME}">
+        <button class="connect" id="conn" data-act="devices"></button></div>
       <div class="pad"><nav class="grid rows" style="--rows:${Math.ceil(t.length / 3)}" aria-label="IPTV">${t.map(([v, ic, l]) => `<button class="go" ${v === 'settings' ? 'data-go="settings"' : `data-tvtab="${v}"`}>${icon(ic)}<span class="label">${l}</span></button>`).join('')}</nav></div>
     </div>
   </div>`;
@@ -1397,9 +1398,9 @@ function emblemSvg() {
 function updateConn() {
   const c = $('#conn'); if (!c) return;
   const dev = curDev(), local = S.device === 'local';
-  const title = dev ? dev.name : local ? 'This device' : 'Connect';
+  const title = dev ? dev.name : local ? (ED ? 'This phone' : 'This device') : ED ? 'Connect a TV' : 'Connect';
   const away = dev?.away && N.mirror.state !== 'live';
-  const sub = N.mirror.state === 'live' ? 'Mirroring your screen' : dev ? (away ? 'Not connected · waiting for it' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : N.on ? 'Find a screen' : 'Choose a screen';
+  const sub = N.mirror.state === 'live' ? 'Mirroring your screen' : dev ? (away ? 'Not connected · waiting for it' : `Connected${dev.kind ? ' · ' + dev.kind : ''}`) : local ? 'Playing here' : ED ? 'Tap to watch on your TV' : N.on ? 'Find a screen' : 'Choose a screen';
   c.className = 'connect' + ((dev && !away) || local ? ' on' : '');
   c.innerHTML = `<span class="c-title">${esc(title)}</span><span class="c-sub">${esc(sub)}</span>`;
   const label = (dev && !away) || local ? `Connected to ${title}. Change screen` : 'Connect a screen';
@@ -1436,7 +1437,7 @@ function histPanel(sec) {
   return `<section class="panel"><div class="panel-t"><span class="label">History</span><div class="grow"></div><button class="btn flat sm" data-act="edClearHist" data-sec="${sec}">Clear</button></div>
     ${list.map(h => {
       const done = h.dur ? Math.min(100, h.pos / h.dur * 100) : 0;
-      const left = !h.live && h.dur && h.pos > 5 ? (h.dur - h.pos < 60 ? 'Watched' : fmt(h.dur - h.pos) + ' left') : '';
+      const left = !h.live && h.dur && h.pos > 5 ? (h.dur - h.pos < Math.min(60, h.dur * .05) ? 'Watched' : fmt(h.dur - h.pos) + ' left') : '';
       return `<button class="row" data-resume="${esc(h.url)}" style="width:100%;text-align:left">${thumb(h.logo ? h : { ...h, url: '' })}
         <div class="meta"><div class="t">${esc(h.show || h.title)}</div><div class="s">${h.show ? `<span style="text-transform:none">${esc((h.ser?.season ? 'S' + h.ser.season + ' · ' : '') + h.title)}</span>` : ''}<span>${esc(when(h.at))}</span>${h.live ? '<span class="tag-LIVE">Live</span>' : ''}${left ? `<span>${esc(left)}</span>` : ''}</div>
         ${done ? `<span class="hbar"><i style="width:${done}%"></i></span>` : ''}</div><span class="round sm acc">${icon('play')}</span></button>`;

@@ -150,6 +150,38 @@ class Bridge implements WebViewCompat.WebMessageListener {
                         Media shared = media.withUrl(files.publicUrl(media.url, host));
                         main.post(() -> startPlay(device, shared, done));
                     });
+                } else if (dlna.has(device) && media.url.matches("(?i)^https?://.+")) {
+                    // TVs fetch the link themselves. If one refuses it (IPTV servers redirect, send no DLNA headers or a
+                    // type the TV doesn't know), send it through this phone instead, which adds what DLNA TVs need.
+                    String host = dlna.hostOf(device);
+                    startPlay(device, media, new Done() {
+                        @Override
+                        public void ok() {
+                            done.ok();
+                        }
+
+                        @Override
+                        public void fail(String direct) {
+                            work.execute(() -> {
+                                try {
+                                    Media relayed = media.withUrl(files.publicUrl(files.proxyUrl(media.url), host));
+                                    main.post(() -> startPlay(device, relayed, new Done() {
+                                        @Override
+                                        public void ok() {
+                                            done.ok();
+                                        }
+
+                                        @Override
+                                        public void fail(String error) {
+                                            done.fail(direct);
+                                        }
+                                    }));
+                                } catch (IOException e) {
+                                    main.post(() -> done.fail(direct));
+                                }
+                            });
+                        }
+                    });
                 } else startPlay(device, media, done);
                 break;
             }

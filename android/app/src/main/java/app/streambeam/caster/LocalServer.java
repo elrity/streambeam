@@ -139,6 +139,11 @@ class LocalServer {
         }
         int code = c.getResponseCode();
         String type = c.getContentType() != null ? c.getContentType() : "application/octet-stream";
+        // IPTV servers often say "octet-stream"; TVs (Samsung especially) only play a video type they recognise.
+        if (!type.toLowerCase(Locale.US).startsWith("video/") && !type.toLowerCase(Locale.US).startsWith("audio/")) {
+            String guess = videoType(target);
+            if (guess != null) type = guess;
+        }
         boolean playlist = type.toLowerCase(Locale.US).contains("mpegurl") || target.split("\\?")[0].toLowerCase(Locale.US).endsWith(".m3u8");
         InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
         StringBuilder h = new StringBuilder("HTTP/1.1 ").append(code).append(code == 206 ? " Partial Content" : code >= 400 ? " Error" : " OK").append("\r\n")
@@ -154,6 +159,8 @@ class LocalServer {
             if (c.getHeaderField("Content-Length") != null) h.append("Content-Length: ").append(c.getHeaderField("Content-Length")).append("\r\n");
             if (c.getHeaderField("Content-Range") != null) h.append("Content-Range: ").append(c.getHeaderField("Content-Range")).append("\r\n");
             if (c.getHeaderField("Accept-Ranges") != null) h.append("Accept-Ranges: ").append(c.getHeaderField("Accept-Ranges")).append("\r\n");
+            // What DLNA TVs (Samsung, LG) ask for before they play: streamed, seekable by byte range.
+            h.append("transferMode.dlna.org: Streaming\r\ncontentFeatures.dlna.org: DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000\r\n");
             out.write(h.append("\r\n").toString().getBytes(StandardCharsets.ISO_8859_1));
             if (head || in == null) return;
             byte[] buf = new byte[64 * 1024];
@@ -163,6 +170,17 @@ class LocalServer {
             if (in != null) in.close();
             c.disconnect();
         }
+    }
+
+    static String videoType(String url) {
+        String p = url.split("\\?")[0].toLowerCase(Locale.US);
+        if (p.endsWith(".mkv")) return "video/x-matroska";
+        if (p.endsWith(".mp4") || p.endsWith(".m4v")) return "video/mp4";
+        if (p.endsWith(".ts")) return "video/mp2t";
+        if (p.endsWith(".avi")) return "video/x-msvideo";
+        if (p.endsWith(".webm")) return "video/webm";
+        if (p.endsWith(".mov")) return "video/quicktime";
+        return null;
     }
 
     /** Points every piece, variant and key of a playlist back through this proxy. */

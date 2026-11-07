@@ -383,27 +383,71 @@ class Dlna {
                     soap(d.avUrl, d.avType, "Stop", "");
                 } catch (IOException ignored) {
                 }
-                try {
-                    soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData>"
-                            + xml(didl(media)) + "</CurrentURIMetaData>");
-                } catch (IOException withMetadata) {
-                    // Some screens reject the description; the link alone is enough for them.
-                    soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>");
-                }
-                try {
-                    soap(d.avUrl, d.avType, "Play", "<Speed>1</Speed>");
-                } catch (IOException playError) {
-                    // Some screens start on their own and refuse an extra Play.
-                    Thread.sleep(800);
-                    String state = tag(soap(d.avUrl, d.avType, "GetTransportInfo", ""), "CurrentTransportState");
-                    if (!"PLAYING".equals(state) && !"TRANSITIONING".equals(state)) throw playError;
-                }
+                setUri(d, media);
+                startPlaying(d);
                 startPolling();
                 done.ok();
             } catch (Exception e) {
                 done.fail(message(e));
             }
         });
+    }
+
+    /**
+     * Hands the link to the screen. TVs differ in which type names they accept (Samsung wants video/x-mkv for MKV,
+     * some want video/mpeg for MPEG-TS) and some reject any description, so each is tried in turn.
+     */
+    private void setUri(Device d, Bridge.Media media) throws IOException {
+        boolean samsung = d.model != null && d.model.toLowerCase(Locale.US).contains("samsung");
+        List<String> types = new ArrayList<>();
+        String m = media.mime.toLowerCase(Locale.US);
+        if (m.contains("matroska") || m.contains("mkv")) {
+            if (samsung) types.add("video/x-mkv");
+            types.add("video/x-matroska");
+            if (!samsung) types.add("video/x-mkv");
+        } else if (m.contains("mp2t") || m.contains("mpeg-tts")) {
+            types.add("video/mp2t");
+            types.add("video/vnd.dlna.mpeg-tts");
+            types.add("video/mpeg");
+        } else types.add(media.mime);
+        types.add("*");
+        IOException last = null;
+        for (String type : types) {
+            try {
+                soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData>"
+                        + xml(didl(media, type)) + "</CurrentURIMetaData>");
+                return;
+            } catch (IOException e) {
+                last = e;
+            }
+        }
+        try {
+            // Some screens reject any description; the link alone is enough for them.
+            soap(d.avUrl, d.avType, "SetAVTransportURI", "<CurrentURI>" + xml(media.url) + "</CurrentURI><CurrentURIMetaData></CurrentURIMetaData>");
+        } catch (IOException e) {
+            throw last != null ? last : e;
+        }
+    }
+
+    /** Samsung and LG TVs often answer "transition not available" while they open the link: ask again. */
+    private void startPlaying(Device d) throws IOException, InterruptedException {
+        IOException last = null;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                soap(d.avUrl, d.avType, "Play", "<Speed>1</Speed>");
+                return;
+            } catch (IOException playError) {
+                last = playError;
+                // Some screens start on their own and refuse an extra Play.
+                Thread.sleep(900);
+                try {
+                    String state = tag(soap(d.avUrl, d.avType, "GetTransportInfo", ""), "CurrentTransportState");
+                    if ("PLAYING".equals(state) || "TRANSITIONING".equals(state)) return;
+                } catch (IOException ignored) {
+                }
+            }
+        }
+        throw last;
     }
 
     void command(String cmd, double value, Done done) {
@@ -512,17 +556,17 @@ class Dlna {
 
     /* ---------- UPnP helpers ---------- */
 
-    private static String didl(Bridge.Media media) {
+    private static String didl(Bridge.Media media, String type) {
         String upnpClass = media.mime.startsWith("audio") ? "object.item.audioItem.musicTrack" : "object.item.videoItem";
         // Standard DLNA flags (streaming, seekable by byte range). Many car and TV receivers want them before showing video.
-        String lower = media.mime.toLowerCase(Locale.US);
-        String features = lower.contains("mpegurl") || lower.contains("dash") ? "*"
+        String lower = type.toLowerCase(Locale.US);
+        String features = lower.equals("*") || lower.contains("mpegurl") || lower.contains("dash") ? "*"
                 : media.live ? "DLNA.ORG_OP=00;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000" // live: no seeking
                 : "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000";
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\""
                 + " xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"><item id=\"0\" parentID=\"-1\" restricted=\"1\">"
                 + "<dc:title>" + xml(media.title) + "</dc:title><upnp:class>" + upnpClass + "</upnp:class>"
-                + "<res protocolInfo=\"http-get:*:" + xml(media.mime) + ":" + features + "\">" + xml(media.url) + "</res></item></DIDL-Lite>";
+                + "<res protocolInfo=\"http-get:*:" + xml(type) + ":" + features + "\">" + xml(media.url) + "</res></item></DIDL-Lite>";
     }
 
     private static String soap(String url, String service, String action, String args) throws IOException {
