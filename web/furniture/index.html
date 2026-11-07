@@ -19,6 +19,7 @@
   html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2421; color: var(--ink);
     font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  #cam { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; background: #000; }
   canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
   /* ---------- Start screen ---------- */
@@ -36,6 +37,10 @@
   .btn.primary:disabled { opacity: .35; cursor: default; }
   .btn.ghost { background: #fff; color: var(--ink); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
   #support { font-size: 13px; max-width: 330px; }
+  #why { font-size: 13px; max-width: 340px; padding: 12px 14px; border-radius: 14px; background: #fff9; color: #3d4440; }
+  #why a { color: var(--accent); font-weight: 600; }
+  #why .pill { display: block; margin: 10px auto 0; width: max-content; padding: 9px 16px; border-radius: 999px;
+    background: var(--accent); color: #fff; text-decoration: none; }
   .feat { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 360px; }
   .feat span { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #fff9; color: #3d4440; }
 
@@ -103,6 +108,7 @@
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 </head>
 <body>
+<video id="cam" playsinline muted autoplay></video>
 <canvas id="view"></canvas>
 
 <div id="loading">Getting the furniture ready…</div>
@@ -115,6 +121,7 @@
   <button class="btn primary" id="btnAR" disabled>Checking your camera…</button>
   <button class="btn ghost" id="btnPreview">Try it in a 3D room</button>
   <p id="support"></p>
+  <p id="why" hidden></p>
 </section>
 
 <div id="hud">
@@ -124,6 +131,7 @@
       <span class="chip" id="chipFloor"><i></i><span>Finding floor</span></span>
       <span class="chip off" id="chipWalls"><i></i><span></span></span>
       <span class="chip off" id="chipLight"><i></i><span>Light matched</span></span>
+      <button class="chip ok off" id="chipHeight"><i></i><span>Phone at 1.4 m</span></button>
     </div>
     <button class="round" id="btnClear" aria-label="Remove all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
   </div>

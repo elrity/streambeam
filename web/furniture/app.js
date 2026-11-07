@@ -580,6 +580,137 @@ function updateOrbit() {
   camPos.copy(camera.position);
 }
 
+// ---------- Basic camera mode (phones without Google's AR) ----------
+// The camera picture is shown behind the 3D view, and the phone's motion sensor turns the 3D camera
+// with the phone. The phone is assumed to stay in one spot at chest height, so furniture stays fixed
+// while you turn around; walking away isn't tracked. The room's light is read from the camera picture.
+
+const video = $('cam');
+let camStream = null, orient = null, orientSeen = 0, camHeight = 1.4, camFov = 60, lightSeen = false;
+const zee = new THREE.Vector3(0, 0, 1), qFlat = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+const euler = new THREE.Euler(), qScreen = new THREE.Quaternion(), qPhone = new THREE.Quaternion();
+let firstOrient = true;
+
+function onOrient(e) {
+  if (e.alpha === null && e.beta === null) return;
+  orient = e;
+  orientSeen = performance.now();
+}
+
+async function startCamera() {
+  // iPhone asks for motion access, and only from a tap
+  try {
+    if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') toast('Allow motion access so furniture stays put when you turn');
+    }
+  } catch {}
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+  } catch (e) {
+    toast(e && e.name === 'NotAllowedError' ? 'Allow the camera to use RoomFit' : 'Could not open the camera');
+    return;
+  }
+  video.srcObject = camStream;
+  await video.play().catch(() => {});
+  addEventListener('deviceorientation', onOrient);
+  enterMode('camera');
+  setTimeout(() => {
+    if (mode === 'camera' && !orientSeen) toast('No motion sensor found: furniture can\'t follow when you turn');
+  }, 2500);
+}
+
+function stopCamera() {
+  removeEventListener('deviceorientation', onOrient);
+  camStream?.getTracks().forEach((t) => t.stop());
+  camStream = null;
+  video.srcObject = null;
+  orient = null; orientSeen = 0; firstOrient = true; lightSeen = false;
+}
+
+// The 3D camera's field of view must match the picture as shown (it fills the screen, so it is cropped).
+function cameraFov() {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return 60;
+  const f = (Math.max(vw, vh) / 2) / Math.tan(THREE.MathUtils.degToRad(64 / 2)); // ~64° across the long side
+  const scale = Math.max(innerWidth / vw, innerHeight / vh);
+  return THREE.MathUtils.radToDeg(2 * Math.atan((innerHeight / 2) / (f * scale)));
+}
+
+function updateCameraMode(t) {
+  if (orient) {
+    const d = THREE.MathUtils.degToRad;
+    const screenAngle = d(screen.orientation?.angle ?? window.orientation ?? 0);
+    euler.set(d(orient.beta || 0), d(orient.alpha || 0), -d(orient.gamma || 0), 'YXZ');
+    qPhone.setFromEuler(euler).multiply(qFlat).multiply(qScreen.setFromAxisAngle(zee, -screenAngle));
+    if (firstOrient) { camera.quaternion.copy(qPhone); firstOrient = false; }
+    else camera.quaternion.slerp(qPhone, 0.45);
+  }
+  camera.position.set(0, camHeight, 0);
+  const fov = cameraFov();
+  if (Math.abs(fov - camFov) > 0.1 || camera.aspect !== innerWidth / innerHeight) {
+    camFov = fov;
+    camera.fov = fov;
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  }
+  camera.updateMatrixWorld();
+  pickCam.projectionMatrix.copy(camera.projectionMatrix);
+  pickCam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+  pickCam.matrixWorld.copy(camera.matrixWorld);
+  pickCam.matrixWorldInverse.copy(camera.matrixWorldInverse);
+  camPos.copy(camera.position);
+  sampleRoomLight(t);
+}
+
+// Reads the room's light from a tiny copy of the camera picture: overall brightness and color light
+// the furniture, and the brightest spot (a window or a lamp) sets where the shadows fall.
+const lightCanvas = document.createElement('canvas');
+lightCanvas.width = lightCanvas.height = 24;
+const lightCtx = lightCanvas.getContext('2d', { willReadFrequently: true });
+const tint = new THREE.Color(), white = new THREE.Color(1, 1, 1);
+let lastLight = 0;
+
+function sampleRoomLight(t) {
+  if (t - lastLight < 400 || video.readyState < 2) return;
+  lastLight = t;
+  const N = 24;
+  lightCtx.drawImage(video, 0, 0, N, N);
+  const px = lightCtx.getImageData(0, 0, N, N).data;
+  const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  let r = 0, g = 0, b = 0, best = -1, bi = 0;
+  for (let i = 0; i < N * N; i++) {
+    const R = lin(px[i * 4]), G = lin(px[i * 4 + 1]), B = lin(px[i * 4 + 2]);
+    r += R; g += G; b += B;
+    const L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    if (L > best) { best = L; bi = i; }
+  }
+  r /= N * N; g /= N * N; b /= N * N;
+  const mean = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const k = clamp(Math.sqrt(mean / 0.18), 0.35, 1.6);         // how bright the room is
+  const contrast = clamp((best - mean) / (best + 0.02), 0, 1);  // one strong light, or flat light
+  tint.setRGB(r, g, b).multiplyScalar(1 / Math.max(r, g, b, 1e-4));
+  const a = lightSeen ? 0.25 : 1;
+  hemi.color.lerp(tint, a);
+  hemi.groundColor.lerp(tint.clone().multiplyScalar(0.55), a);
+  hemi.intensity += (0.55 * k - hemi.intensity) * a;
+  scene.environmentIntensity += (0.55 * k - scene.environmentIntensity) * a;
+  sun.color.lerp(tint.clone().lerp(white, 0.5), a);
+  sun.intensity += ((0.4 + 2.6 * contrast) * k - sun.intensity) * a;
+  catcher.material.opacity += (0.12 + 0.3 * contrast - catcher.material.opacity) * a;
+  // Brightest spot -> light direction (the picture fills the screen, cropped at the sides)
+  const vw = video.videoWidth || N, vh = video.videoHeight || N;
+  const scale = Math.max(innerWidth / vw, innerHeight / vh);
+  const sx = ((bi % N) + 0.5) / N * vw * scale - (vw * scale - innerWidth) / 2;
+  const sy = (Math.floor(bi / N) + 0.5) / N * vh * scale - (vh * scale - innerHeight) / 2;
+  const dir = rayFrom(sx, sy).direction.clone();
+  dir.y = Math.max(Math.abs(dir.y), 0.45); // a bright floor reflection still means light from above
+  sunDir.lerp(dir.normalize(), a).normalize();
+  lightSeen = true;
+}
+
 // ---------- Modes ----------
 
 function enterMode(m) {
@@ -598,6 +729,20 @@ function enterMode(m) {
   catcher.material.opacity = 0.3;
   room.visible = m === 'preview';
   scene.background = m === 'preview' ? new THREE.Color(0xd8d1c6) : null;
+  video.style.display = m === 'camera' ? 'block' : 'none';
+  modeStarted = performance.now();
+  if (m === 'camera') {
+    surfaces.fixed = { floorY: 0, walls: [] };
+    surfaces.floorY = 0;
+    const scan = $('scan');
+    scan.querySelector('b').textContent = 'Stand in one spot';
+    scan.lastElementChild.textContent = 'Hold the phone at chest height and turn to look around the room';
+    $('chipHeight').lastElementChild.textContent = `Phone at ${camHeight.toFixed(1)} m`;
+  } else {
+    const scan = $('scan');
+    scan.querySelector('b').textContent = 'Point at the floor';
+    scan.lastElementChild.textContent = 'Move your phone slowly from side to side';
+  }
   if (m === 'preview') {
     surfaces.fixed = { floorY: 0, walls: PREVIEW_WALLS };
     surfaces.floorY = 0;
@@ -619,6 +764,8 @@ function leaveMode() {
   hitSources = [];
   anchorQueue.length = 0;
   centerHit = null;
+  if (mode === 'camera') stopCamera();
+  video.style.display = 'none';
   mode = null;
   renderer.setAnimationLoop(null);
   hud.classList.remove('on');
@@ -635,6 +782,7 @@ function loop(t, frame) {
   lastT = t;
   if (mode === 'ar' && frame) xrFrame(frame);
   if (mode === 'preview') updateOrbit();
+  if (mode === 'camera') updateCameraMode(t);
 
   const busy = drag?.item?.root.visible || gesture?.type === 'move' || gesture?.type === 'twist' || dialDrag;
   const active = drag?.item || (gesture?.item) || selected;
@@ -647,14 +795,14 @@ function loop(t, frame) {
   sunTarget.position.copy(focusPoint);
   sun.position.copy(focusPoint).addScaledVector(sunDir, 6);
 
-  if (surfaces.floorY !== null && mode === 'ar') {
+  if (surfaces.floorY !== null && mode !== 'preview') {
     catcher.visible = true;
     catcher.position.set(focusPoint.x, surfaces.floorY + 0.001, focusPoint.z);
   }
 
   // Floor dots: while dragging, and briefly when the floor is first found
   const fg = floorGrid.material.uniforms;
-  const scanning = mode === 'ar' && !items.length;
+  const scanning = mode !== 'preview' && !items.length;
   const want = surfaces.floorY === null ? 0 : busy ? 0.85 : scanning ? 0.5 : 0;
   fg.opacity.value += (want - fg.opacity.value) * Math.min(1, dt * 8);
   floorGrid.visible = fg.opacity.value > 0.01;
@@ -667,6 +815,12 @@ function loop(t, frame) {
   // The landing circle
   const showReticle = mode === 'ar' && centerHit && !busy && surfaces.floorY !== null;
   reticle.visible = !!showReticle;
+  if (mode === 'camera' && !busy) {
+    const fp = floorPoint(innerWidth / 2, innerHeight / 2);
+    reticle.visible = !!fp;
+    if (fp) reticle.matrix.makeTranslation(fp.x, fp.y, fp.z);
+    reticle.userData.mat.color.set(0xffffff);
+  }
   if (showReticle) {
     if (centerHit.kind === 'floor') reticle.matrix.copy(centerHit.matrix);
     else {
@@ -699,11 +853,20 @@ function toast(msg) {
 
 const buzz = (ms) => { try { navigator.vibrate?.(ms); } catch {} };
 
-let arStarted = 0;
+let arStarted = 0, modeStarted = 0;
 function updateStatus() {
   const floor = surfaces.floorY !== null;
   const walls = surfaces.walls().length;
   const cf = $('chipFloor'), cw = $('chipWalls'), cl = $('chipLight');
+  $('chipHeight').classList.toggle('off', mode !== 'camera');
+  if (mode === 'camera') {
+    cf.classList.add('ok'); cf.lastElementChild.textContent = 'Basic camera';
+    cw.classList.add('off');
+    cl.classList.toggle('off', !lightSeen); cl.classList.add('ok');
+    $('scan').classList.toggle('hide', performance.now() - modeStarted > 5000 || items.length > 0);
+    updateHint();
+    return;
+  }
   if (mode === 'preview') {
     cf.classList.add('ok'); cf.lastElementChild.textContent = '3D room';
     cw.classList.add('off'); cl.classList.add('off');
@@ -732,6 +895,7 @@ function updateHint() {
   const h = $('trayHint');
   if (mode === 'ar' && surfaces.floorY === null) h.textContent = 'Find the floor first, then drag a piece in';
   else if (mode === 'ar') h.textContent = 'Drag a piece into your room · tap to drop it at the circle';
+  else if (mode === 'camera') h.textContent = 'Stay in one spot · drag a piece onto the floor or tap to drop it at the circle';
   else h.textContent = 'Drag a piece onto the floor · tap to add it';
   $('btnClear').style.visibility = items.length ? 'visible' : 'hidden';
 }
@@ -826,7 +990,7 @@ function buildCards(thumbs) {
 
 function tapPlace(type) {
   let p = null;
-  if (mode === 'ar') {
+  if (mode !== 'preview') {
     if (centerHit && centerHit.kind === 'floor' && surfaces.floorY !== null) p = centerHit.p.clone().setY(surfaces.floorY);
     else p = floorPoint(innerWidth / 2, innerHeight / 2);
   } else p = floorPoint(innerWidth / 2, innerHeight * 0.55) || new THREE.Vector3();
@@ -954,6 +1118,12 @@ $('btnClear').onclick = () => {
   clearArmed = 0;
   toast('Room cleared');
 };
+const HEIGHTS = [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7];
+$('chipHeight').onclick = () => {
+  camHeight = HEIGHTS[(HEIGHTS.indexOf(camHeight) + 1) % HEIGHTS.length];
+  $('chipHeight').lastElementChild.textContent = `Phone at ${camHeight.toFixed(1)} m`;
+  toast('Furniture too big? Raise the phone height. Too small? Lower it.');
+};
 $('btnExit').onclick = () => {
   const s = renderer.xr.getSession();
   if (s) s.end(); else leaveMode();
@@ -1006,18 +1176,43 @@ async function boot() {
   const btn = $('btnAR'), note = $('support');
   let ar = false;
   try { ar = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch {}
+  const ua = navigator.userAgent;
+  const android = /Android/i.test(ua);
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const inApp = /; wv\)|FBAN|FBAV|Instagram|WhatsApp|Line\/|GSA\/|Snapchat|TikTok/i.test(ua);
+  const otherBrowser = /SamsungBrowser|Edg|OPR|Opera|YaBrowser|MiuiBrowser|HeyTapBrowser|UCBrowser|Firefox|DuckDuckGo|Brave|Vivaldi/i.test(ua);
+  const chrome = /Chrome\/\d/.test(ua) && !inApp && !otherBrowser;
+  const canCamera = !!navigator.mediaDevices?.getUserMedia && isSecureContext;
+  const chromeLink = `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+  const arcoreLink = 'https://play.google.com/store/apps/details?id=com.google.ar.core';
+  const why = $('why');
+
   if (ar) {
     btn.disabled = false;
     btn.textContent = 'Open camera in my room';
-    note.textContent = 'Uses your camera to find the floor and walls. Nothing leaves your phone.';
+    note.textContent = 'Full AR: finds your floor and walls, and furniture stays put as you walk around. Nothing leaves your phone.';
+    btn.onclick = () => { arStarted = performance.now(); startAR(); };
+  } else if (canCamera) {
+    btn.disabled = false;
+    btn.textContent = 'Open camera in my room';
+    btn.onclick = () => startCamera();
+    note.textContent = 'Basic camera: stand in one spot and turn the phone; furniture stays fixed while you turn.';
+    if (android && !chrome) {
+      why.innerHTML = `<b>Want full AR?</b> This browser can't run it (walls, walking around). Open this page in Chrome.
+        <a class="pill" href="${chromeLink}">Open in Chrome</a>`;
+    } else if (android) {
+      why.innerHTML = `<b>Why not full AR?</b> Chrome says this phone can't run Google's AR. If your phone is on
+        <a href="https://developers.google.com/ar/devices" target="_blank" rel="noopener">Google's list</a>, install
+        Google Play Services for AR, then reload. <a class="pill" href="${arcoreLink}" target="_blank" rel="noopener">Get Google Play Services for AR</a>`;
+    } else if (ios) {
+      why.innerHTML = '<b>Why not full AR?</b> Safari on iPhone can\'t run web AR yet; full AR works on Android phones with Chrome.';
+    }
+    why.hidden = !why.innerHTML;
   } else {
-    btn.textContent = 'Camera AR not available here';
-    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    btn.textContent = 'Camera not available here';
     note.textContent = !isSecureContext ? 'Open this page over https to use the camera.'
-      : ios ? 'On iPhone, Safari can\'t run web AR yet. Open this page on an Android phone with Chrome, or try the 3D room.'
-      : 'Camera AR needs an Android phone with Chrome and Google Play Services for AR. You can still try the 3D room.';
+      : 'This browser can\'t open the camera. You can still try the 3D room.';
   }
-  btn.onclick = () => { arStarted = performance.now(); startAR(); };
   $('btnPreview').onclick = () => enterMode('preview');
   if (new URLSearchParams(location.search).has('preview')) enterMode('preview');
 }
