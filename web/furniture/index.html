@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>RoomFit</title>
+<meta name="description" content="Place real-size 3D furniture in your room with your phone's camera.">
+<meta name="theme-color" content="#1d2421">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --ink: #1d2421; --paper: #f7f4ee; --card: #ffffffee; --muted: #6c716d;
+    --accent: #1f8a76; --accent-2: #5fe0c8; --danger: #d6453d; --glass: rgba(20, 26, 24, .62);
+    --r: 18px; --shadow: 0 8px 30px rgba(0,0,0,.25);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2421; color: var(--ink);
+    font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- Start screen ---------- */
+  #start { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+    background: radial-gradient(120% 80% at 50% 0%, #fdfbf7 0%, #efe9df 60%, #e3dbcd 100%); text-align: center; }
+  #start .hero { width: min(340px, 82vw); aspect-ratio: 1.35; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #start .hero img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 10px 14px rgba(0,0,0,.18)); }
+  #start .hero img:first-child { grid-column: 1 / 3; height: 130%; margin-top: -12%; }
+  #start h1 { margin: 6px 0 0; font-size: 34px; letter-spacing: -.02em; }
+  #start p { margin: 0; color: var(--muted); max-width: 340px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-width: 250px;
+    padding: 15px 22px; border-radius: 999px; font-weight: 650; font-size: 16px; }
+  .btn.primary { background: var(--ink); color: #fff; box-shadow: var(--shadow); }
+  .btn.primary:disabled { opacity: .35; cursor: default; }
+  .btn.ghost { background: #fff; color: var(--ink); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  #support { font-size: 13px; max-width: 330px; }
+  .feat { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 360px; }
+  .feat span { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #fff9; color: #3d4440; }
+
+  /* ---------- HUD (the AR DOM overlay) ---------- */
+  #hud { position: fixed; inset: 0; z-index: 10; display: none; touch-action: none; user-select: none; -webkit-user-select: none; color: #fff; }
+  #hud.on { display: block; }
+  .top { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: flex-start; gap: 8px;
+    padding: calc(12px + env(safe-area-inset-top)) 12px 0; pointer-events: none; }
+  .top > * { pointer-events: auto; }
+  .round { width: 44px; height: 44px; border-radius: 50%; background: var(--glass); backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px); display: grid; place-items: center; flex: none; }
+  .round svg { width: 22px; height: 22px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px;
+    background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); font-size: 13px; font-weight: 550; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: #f0b84a; box-shadow: 0 0 0 3px #f0b84a33; }
+  .chip.ok i { background: var(--accent-2); box-shadow: 0 0 0 3px #5fe0c833; }
+  .chip.off { display: none; }
+
+  #scan { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+    padding: 18px 20px; border-radius: var(--r); background: var(--glass); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    width: min(300px, 80vw); transition: opacity .3s; }
+  #scan.hide { opacity: 0; }
+  #scan .phone { width: 46px; height: 76px; margin: 0 auto 10px; border: 3px solid #fff; border-radius: 10px; animation: sweep 2.4s ease-in-out infinite; }
+  @keyframes sweep { 0%,100% { transform: translateX(-26px) rotate(-8deg); } 50% { transform: translateX(26px) rotate(8deg); } }
+  #scan b { display: block; font-size: 16px; margin-bottom: 4px; }
+  #scan span { font-size: 13px; opacity: .85; }
+
+  /* Selected piece tools */
+  #tools { position: absolute; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+    width: min(440px, calc(100vw - 24px)); padding: 10px 12px 12px; border-radius: var(--r); background: var(--card); color: var(--ink);
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; }
+  #tools.on { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+  #tools .row { display: flex; align-items: center; gap: 8px; }
+  #tools .name { flex: 1; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #tools .name small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+  .ibtn { width: 42px; height: 42px; border-radius: 12px; background: #eef0ee; display: grid; place-items: center; flex: none; }
+  .ibtn svg { width: 22px; height: 22px; }
+  .ibtn.del { background: #fde9e7; color: var(--danger); }
+  .swatches { display: flex; gap: 8px; margin-top: 10px; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #0002; }
+  .sw.on { box-shadow: 0 0 0 2px var(--accent); }
+  #dial { position: relative; margin-top: 10px; height: 40px; border-radius: 12px; background: repeating-linear-gradient(90deg, #d9dcd9 0 2px, transparent 2px 14px), #eef0ee;
+    display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--muted); touch-action: none; }
+  #dial b { color: var(--ink); }
+
+  /* Catalog tray */
+  #tray { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(0,0,0,.55), transparent); }
+  #tray .hint { font-size: 12px; text-align: center; margin-bottom: 8px; opacity: .9; text-shadow: 0 1px 3px #000a; }
+  .cards { display: flex; gap: 10px; justify-content: center; }
+  .card { width: min(31vw, 132px); border-radius: 16px; background: var(--card); color: var(--ink); padding: 6px 6px 8px;
+    box-shadow: var(--shadow); touch-action: none; text-align: center; transition: transform .15s; }
+  .card:active, .card.drag { transform: scale(.94); }
+  .card img { width: 100%; aspect-ratio: 1.25; object-fit: contain; display: block; pointer-events: none; -webkit-user-drag: none; }
+  .card b { font-size: 13px; display: block; }
+  .card small { font-size: 11px; color: var(--muted); }
+
+  #toast { position: absolute; left: 50%; top: calc(70px + env(safe-area-inset-top)); transform: translate(-50%, -10px); padding: 9px 16px;
+    border-radius: 999px; background: var(--ink); color: #fff; font-size: 14px; font-weight: 600; opacity: 0; transition: .25s; pointer-events: none;
+    white-space: nowrap; box-shadow: var(--shadow); }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  #loading { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: #f2eee6; color: var(--muted); font-weight: 600; }
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="loading">Getting the furniture ready…</div>
+
+<section id="start">
+  <div class="hero"><img id="heroSofa" alt=""><img id="heroChair" alt=""><img id="heroTable" alt=""></div>
+  <h1>RoomFit</h1>
+  <p>See real-size 3D furniture in your own room before you buy it.</p>
+  <div class="feat"><span>Finds your floor and walls</span><span>Matches your room's light</span><span>Stays where you put it</span></div>
+  <button class="btn primary" id="btnAR" disabled>Checking your camera…</button>
+  <button class="btn ghost" id="btnPreview">Try it in a 3D room</button>
+  <p id="support"></p>
+</section>
+
+<div id="hud">
+  <div class="top">
+    <button class="round" id="btnExit" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="chips">
+      <span class="chip" id="chipFloor"><i></i><span>Finding floor</span></span>
+      <span class="chip off" id="chipWalls"><i></i><span></span></span>
+      <span class="chip off" id="chipLight"><i></i><span>Light matched</span></span>
+    </div>
+    <button class="round" id="btnClear" aria-label="Remove all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+  </div>
+
+  <div id="scan"><div class="phone"></div><b>Point at the floor</b><span>Move your phone slowly from side to side</span></div>
+
+  <div id="tools">
+    <div class="row">
+      <div class="name" id="selName">Chair<small>Oak · grey</small></div>
+      <button class="ibtn" id="rotL" aria-label="Turn left"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+      <button class="ibtn" id="rotR" aria-label="Turn right"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <button class="ibtn" id="btnDup" aria-label="Add another"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/></svg></button>
+      <button class="ibtn del" id="btnDel" aria-label="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>
+    </div>
+    <div class="swatches" id="swatches"></div>
+    <div id="dial"><span>↔ Drag here to turn · <b id="deg">0°</b></span></div>
+  </div>
+
+  <div id="tray">
+    <div class="hint" id="trayHint">Drag a piece into your room · tap to drop it at the circle</div>
+    <div class="cards" id="cards"></div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script type="module" src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>
