@@ -75,15 +75,24 @@ public class MainActivity extends Activity {
             WebViewCompat.addWebMessageListener(web, "StreamBeamNative", Collections.singleton(origin), bridge);
         }
 
-        if (state != null) web.restoreState(state);
+        if (state != null && !IPTV) web.restoreState(state);
         else web.loadUrl(urlFor(getIntent()));
     }
+
+    private static final boolean IPTV = "iptv".equals(BuildConfig.EDITION);
 
     /** Shortcuts and links open their own address inside the app; anything else opens the start page. */
     private String urlFor(Intent intent) {
         Uri data = intent != null ? intent.getData() : null;
-        if (data != null && "https".equals(data.getScheme()) && start.getHost() != null && start.getHost().equals(data.getHost())) return data.toString();
-        return start.toString();
+        if (data != null && "https".equals(data.getScheme()) && start.getHost() != null && start.getHost().equals(data.getHost())) return edition(data).toString();
+        return edition(start).toString();
+    }
+
+    /** Rity IPTV always asks for the current page (never a copy saved on the phone) and names its edition in the
+     *  address as well as in the user agent. The page removes both from the address bar. */
+    private static Uri edition(Uri u) {
+        if (!IPTV) return u;
+        return u.buildUpon().appendQueryParameter("edition", "iptv").appendQueryParameter("fresh", Long.toString(System.currentTimeMillis())).build();
     }
 
     @Override
