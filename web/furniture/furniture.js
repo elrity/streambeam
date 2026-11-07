@@ -351,45 +351,134 @@ function table(v) {
 }
 
 // ---------- Catalog ----------
+// Real 3D models (photo-based textures; see models/CREDITS.md). Each is placed so its lowest point
+// is exactly on the floor (y = 0), centered on its footprint, front toward +Z.
+// If a model can't be loaded, a piece modeled in code above stands in for it.
 
 export const CATALOG = {
   chair: {
-    name: 'Dining chair', dims: [0.46, 0.5, 0.82], hasBack: true, build: chair,
+    name: 'Velvet armchair', url: 'models/armchair.glb', hasBack: true,
     variants: [
-      { name: 'Oak · grey', wood: 'oak', fabric: 'grey', swatch: '#c9a275' },
-      { name: 'Walnut · beige', wood: 'walnut', fabric: 'beige', swatch: '#7a5236' },
-      { name: 'Black · green', wood: 'black', fabric: 'green', swatch: '#2b2826' },
-      { name: 'White · cream', wood: 'white', fabric: 'cream', swatch: '#f1ede6' },
+      { name: 'Mango velvet', gltf: 'Mango Velvet', swatch: '#e2733f' },
+      { name: 'Peacock velvet', gltf: 'Peacock Velvet', swatch: '#1e6e77' },
     ],
+    fallback: { build: chair, dims: [0.46, 0.5, 0.82], variant: { wood: 'oak', fabric: 'grey' } },
   },
   sofa: {
-    name: '3-seat sofa', dims: [2.04, 0.9, 0.84], hasBack: true, build: sofa,
+    name: 'Velvet sofa', url: 'models/sofa.glb', hasBack: true,
     variants: [
-      { name: 'Light grey', fabric: 'grey', accent: 'rust', wood: 'oak', swatch: '#9c9c98' },
-      { name: 'Beige', fabric: 'beige', accent: 'blue', wood: 'walnut', swatch: '#cdbca2' },
-      { name: 'Dark blue', fabric: 'blue', accent: 'cream', wood: 'black', swatch: '#3c4b60' },
-      { name: 'Green velvet', fabric: 'green', accent: 'beige', wood: 'walnut', swatch: '#506d55' },
+      { name: 'Champagne', gltf: 'Champagne', swatch: '#d9c4a1' },
+      { name: 'Navy', gltf: 'Navy', swatch: '#22396a' },
+      { name: 'Gray', gltf: 'Gray', swatch: '#8b8b8b' },
+      { name: 'Black', gltf: 'Black', swatch: '#232323' },
+      { name: 'Pale pink', gltf: 'Pale Pink', swatch: '#e8bab5' },
     ],
+    fallback: { build: sofa, dims: [2.04, 0.9, 0.84], variant: { fabric: 'grey', accent: 'rust', wood: 'oak' } },
   },
   table: {
-    name: 'Dining table', dims: [1.4, 0.8, 0.75], hasBack: false, build: table,
-    variants: [
-      { name: 'Oak', wood: 'oak', swatch: '#d2ab7c' },
-      { name: 'Walnut', wood: 'walnut', swatch: '#7a5236' },
-      { name: 'White', wood: 'white', swatch: '#f1ede6' },
-      { name: 'Black', wood: 'black', swatch: '#2b2826' },
-    ],
+    name: 'Round dining table', url: 'models/dining-table.glb', height: 0.76, hasBack: false,
+    variants: [{ name: 'Dark wood', swatch: '#5b3426' }],
+    fallback: { build: table, dims: [1.4, 0.8, 0.75], variant: { wood: 'walnut' } },
+  },
+  coffee: {
+    name: 'Coffee table', url: 'models/coffee-table.glb', hasBack: false,
+    variants: [{ name: 'Oak', swatch: '#a27b4b' }],
+    fallback: { build: table, dims: [1.4, 0.8, 0.75], variant: { wood: 'oak' } },
   },
 };
 
-// Builds one piece: the model plus its own soft contact shadow.
+const MODELS = {}; // type -> { scene, variantMaterials: Map<mesh name path, Material[]> } or { procedural: true }
+
+// Loads every model once; pieces placed later are light copies that share geometry and textures.
+export async function loadModels(onProgress) {
+  const { GLTFLoader } = await import('./vendor/loaders/GLTFLoader.js');
+  const loader = new GLTFLoader();
+  const types = Object.keys(CATALOG);
+  let done = 0;
+  await Promise.all(types.map(async (type) => {
+    const def = CATALOG[type];
+    try {
+      const gltf = await loader.loadAsync(def.url);
+      MODELS[type] = await prepare(gltf, def);
+    } catch (e) {
+      console.warn('Model failed, using the built-in one:', type, e);
+      MODELS[type] = { procedural: true };
+      def.dims = def.fallback.dims;
+      def.variants = [{ name: 'Standard', swatch: '#999' }];
+    }
+    onProgress?.(++done / types.length);
+  }));
+}
+
+async function prepare(gltf, def) {
+  const root = gltf.scene;
+  // Drop lights that came with the file and the product label (logos aren't covered by the license)
+  const drop = [];
+  root.traverse((o) => { if (o.isLight || /label/i.test(o.name)) drop.push(o); });
+  drop.forEach((o) => o.parent.remove(o));
+
+  // Material per variant, for each mesh (KHR_materials_variants)
+  const names = (gltf.parser.json.extensions?.KHR_materials_variants?.variants || []).map((v) => v.name);
+  const meshes = [];
+  root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  // Kept outside userData: three.js copies userData as JSON when a model is cloned
+  const looks = [];
+  for (const m of meshes) {
+    m.castShadow = m.receiveShadow = true;
+    m.userData.shared = true;
+    const look = { base: m.material, byVariant: {} };
+    const ext = m.userData.gltfExtensions?.KHR_materials_variants;
+    delete m.userData.gltfExtensions;
+    for (const map of ext?.mappings || []) {
+      const mat = await gltf.parser.getDependency('material', map.material);
+      for (const v of map.variants) look.byVariant[names[v]] = mat;
+    }
+    looks.push(look);
+  }
+
+  // Real size, standing on the floor, centered
+  if (def.height) {
+    const b = new THREE.Box3().setFromObject(root);
+    root.scale.multiplyScalar(def.height / (b.max.y - b.min.y));
+  }
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const c = box.getCenter(new THREE.Vector3());
+  root.position.x -= c.x;
+  root.position.z -= c.z;
+  root.position.y -= box.min.y;
+  const size = box.getSize(new THREE.Vector3());
+  def.dims = [size.x, size.z, size.y].map((v) => Math.round(v * 100) / 100);
+  return { scene: root, looks };
+}
+
+function modelCopy(type, variant) {
+  const def = CATALOG[type], src = MODELS[type];
+  if (!src || src.procedural) {
+    const f = def.fallback;
+    return f.build(f.variant);
+  }
+  const g = new THREE.Group();
+  const copy = src.scene.clone(true);
+  const want = def.variants[variant]?.gltf;
+  let i = 0;
+  copy.traverse((o) => {
+    if (!o.isMesh) return;
+    const look = src.looks[i++];
+    o.material = (want && look.byVariant[want]) || look.base;
+  });
+  g.add(copy);
+  return g;
+}
+
+// Builds one piece: the model plus its own soft contact shadow, which grounds it on the floor.
 export function buildFurniture(type, variant = 0) {
   const def = CATALOG[type];
-  const model = def.build(def.variants[variant]);
+  const model = modelCopy(type, variant);
   const [w, d] = def.dims;
   const blob = new THREE.Mesh(
-    new THREE.PlaneGeometry(w * 1.45, d * 1.45),
-    new THREE.MeshBasicMaterial({ map: textures().blob, transparent: true, opacity: 0.6, depthWrite: false, color: 0x000000 }),
+    new THREE.PlaneGeometry(w * 1.35, d * 1.35),
+    new THREE.MeshBasicMaterial({ map: textures().blob, transparent: true, opacity: 0.78, depthWrite: false, color: 0x000000 }),
   );
   blob.rotation.x = -Math.PI / 2;
   blob.position.y = 0.002;
@@ -398,6 +487,15 @@ export function buildFurniture(type, variant = 0) {
   blob.userData.blob = true;
   model.add(blob);
   return model;
+}
+
+// Frees what belongs to one piece only (models share geometry and textures with the loaded file).
+export function disposePiece(o) {
+  o.traverse((c) => {
+    if (!c.isMesh || c.userData.shared) return;
+    c.geometry.dispose();
+    c.material.dispose();
+  });
 }
 
 export function makeOutlineMesh(type) {
