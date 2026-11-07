@@ -8,7 +8,7 @@
 //   dom-overlay      this page's buttons and catalog drawn over the camera
 import * as THREE from 'three';
 import { RoomEnvironment } from './vendor/RoomEnvironment.js';
-import { CATALOG, buildFurniture, makeOutlineMesh, textures } from './furniture.js';
+import { CATALOG, buildFurniture, makeOutlineMesh, textures, loadModels, disposePiece } from './furniture.js';
 
 const $ = (id) => document.getElementById(id);
 const hud = $('hud');
@@ -72,7 +72,9 @@ class Surfaces {
     this.hitWalls = [];           // walls pieced together from vertical hit points
     this.planeWalls = new Map();  // XRPlane -> wall
     this.floorY = null;
-    this.fixed = null;            // the 3D preview room
+    this.fixed = null;            // the 3D preview room, or the basic camera's floor
+    this.lockedY = null;          // floor height you set in the room setup
+    this.manualWalls = [];        // walls you marked
   }
 
   addHorizontal(y, camY) {
@@ -134,6 +136,7 @@ class Surfaces {
 
   computeFloor(camY) {
     if (this.fixed) { this.floorY = this.fixed.floorY; return; }
+    if (this.lockedY !== null) { this.floorY = this.lockedY; return; }
     const cands = [];
     let best = null;
     for (const [k, b] of this.buckets) {
@@ -154,10 +157,11 @@ class Surfaces {
 
   walls() {
     if (this.fixed) return this.fixed.walls;
-    const out = [...this.planeWalls.values()].filter((w) => w.tmax - w.tmin > 0.3);
+    const out = [...this.manualWalls];
+    const same = (w) => out.some((o) => (o.fromPlane || o.manual) && Math.abs(o.n.dot(w.n)) > 0.95 && Math.abs(Math.sign(o.n.dot(w.n)) * o.d - w.d) < 0.15);
+    for (const w of this.planeWalls.values()) if (w.tmax - w.tmin > 0.3 && !same(w)) out.push(w);
     for (const w of this.hitWalls) {
-      if (w.count < 8 || w.tmax - w.tmin < 0.25) continue;
-      if (out.some((o) => o.fromPlane && o.n.dot(w.n) > 0.95 && Math.abs(o.d - w.d) < 0.12)) continue;
+      if (w.count < 8 || w.tmax - w.tmin < 0.25 || same(w)) continue;
       out.push(w);
     }
     return out;
@@ -255,12 +259,12 @@ scene.add(reticle);
 // ---------- Furniture pieces ----------
 
 const items = [];
-const lastVariant = { chair: 0, sofa: 0, table: 0 };
+const lastVariant = {};
 let selected = null;
 const focusPoint = new THREE.Vector3();
 
 class Item {
-  constructor(type, variant = lastVariant[type]) {
+  constructor(type, variant = lastVariant[type] ?? 0) {
     this.type = type;
     this.def = CATALOG[type];
     this.root = new THREE.Group();
@@ -288,14 +292,13 @@ class Item {
   setPos(p) { this.root.position.copy(p); this.root.quaternion.identity(); }
 }
 
-function disposeTree(o) {
-  o.traverse((c) => { if (c.isMesh) { c.geometry.dispose(); c.material.dispose(); } });
-}
+const disposeTree = disposePiece;
 
 // Pins a piece to the real room. Needs an XRFrame, so it waits for the next one.
 const anchorQueue = [];
 function pin(item) {
   unpin(item);
+  item.dropAt = performance.now();
   if (mode === 'ar') anchorQueue.push(item);
 }
 function unpin(item) {
@@ -413,6 +416,7 @@ let hitSources = [];
 let centerHit = null;
 let xrProbe = null, glBinding = null, cubeRT = null, reflectionDirty = false, estimating = false;
 const tmpM = new THREE.Matrix4();
+const tmpQ = new THREE.Quaternion(), tmpE = new THREE.Euler(), UP = new THREE.Vector3(0, 1, 0);
 
 // Nine rays fanned out from the camera sample more of the room each frame; the first one drives the circle.
 const RAYS = [[0, 0], [0.18, 0], [-0.18, 0], [0, 0.14], [0, -0.14], [0.32, 0.22], [-0.32, 0.22], [0.32, -0.22], [-0.32, -0.22]];
@@ -531,8 +535,15 @@ function xrFrame(frame) {
   for (const item of items) {
     if (!item.anchor || !frame.trackedAnchors?.has(item.anchor)) continue;
     const ap = frame.getPose(item.anchor.anchorSpace, ref);
-    if (ap) { item.root.position.copy(ap.transform.position); item.root.quaternion.copy(ap.transform.orientation); }
+    if (!ap) continue;
+    const q = ap.transform.orientation, pp = ap.transform.position;
+    item.root.position.set(pp.x, surfaces.floorY ?? pp.y, pp.z);
+    tmpQ.set(q.x, q.y, q.z, q.w);
+    tmpE.setFromQuaternion(tmpQ, 'YXZ');
+    item.root.quaternion.setFromAxisAngle(UP, tmpE.y); // upright: only the turn is kept
   }
+  // Every piece stands on the floor, also on phones without anchors and after the floor is set
+  if (surfaces.floorY !== null) for (const item of items) item.root.position.y = surfaces.floorY;
   createAnchors(frame, ref);
   updateLight(frame);
 }
@@ -601,8 +612,7 @@ async function startCamera() {
   // iPhone asks for motion access, and only from a tap
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
-      const r = await DeviceOrientationEvent.requestPermission();
-      if (r !== 'granted') toast('Allow motion access so furniture stays put when you turn');
+      await DeviceOrientationEvent.requestPermission();
     }
   } catch {}
   try {
@@ -732,12 +742,11 @@ function enterMode(m) {
   video.style.display = m === 'camera' ? 'block' : 'none';
   modeStarted = performance.now();
   if (m === 'camera') {
-    surfaces.fixed = { floorY: 0, walls: [] };
+    surfaces.fixed = { floorY: 0, walls: surfaces.manualWalls };
     surfaces.floorY = 0;
     const scan = $('scan');
     scan.querySelector('b').textContent = 'Stand in one spot';
     scan.lastElementChild.textContent = 'Hold the phone at chest height and turn to look around the room';
-    $('chipHeight').lastElementChild.textContent = `Phone at ${camHeight.toFixed(1)} m`;
   } else {
     const scan = $('scan');
     scan.querySelector('b').textContent = 'Point at the floor';
@@ -756,6 +765,8 @@ function enterMode(m) {
   document.body.classList.toggle('preview', m === 'preview');
   updateHint();
   renderer.setAnimationLoop(loop);
+  $('btnRoom').style.display = m === 'preview' ? 'none' : '';
+  if (m !== 'preview') openSetup(); else closeSetup();
 }
 
 function leaveMode() {
@@ -770,6 +781,7 @@ function leaveMode() {
   renderer.setAnimationLoop(null);
   hud.classList.remove('on');
   $('start').style.display = '';
+  closeSetup();
   syncWallViz(0);
 }
 
@@ -803,14 +815,15 @@ function loop(t, frame) {
   // Floor dots: while dragging, and briefly when the floor is first found
   const fg = floorGrid.material.uniforms;
   const scanning = mode !== 'preview' && !items.length;
-  const want = surfaces.floorY === null ? 0 : busy ? 0.85 : scanning ? 0.5 : 0;
+  const want = surfaces.floorY === null ? 0 : setup ? 0.9 : busy ? 0.85 : scanning ? 0.5 : 0;
   fg.opacity.value += (want - fg.opacity.value) * Math.min(1, dt * 8);
   floorGrid.visible = fg.opacity.value > 0.01;
   if (surfaces.floorY !== null) {
     floorGrid.position.set(focusPoint.x, surfaces.floorY + 0.003, focusPoint.z);
     fg.center.value.copy(floorGrid.position);
   }
-  syncWallViz(busy ? 0.6 : 0);
+  syncWallViz(busy ? 0.6 : setup?.step === 'walls' ? 0.75 : 0);
+  updateSetupViz();
 
   // The landing circle
   const showReticle = mode === 'ar' && centerHit && !busy && surfaces.floorY !== null;
@@ -822,12 +835,22 @@ function loop(t, frame) {
     reticle.userData.mat.color.set(0xffffff);
   }
   if (showReticle) {
-    if (centerHit.kind === 'floor') reticle.matrix.copy(centerHit.matrix);
+    const onFloor = centerHit.kind === 'floor' && (setup?.step === 'floor' || Math.abs(centerHit.p.y - surfaces.floorY) < 0.05);
+    if (onFloor) reticle.matrix.copy(centerHit.matrix);
     else {
       const fp = floorPoint(innerWidth / 2, innerHeight / 2);
       if (fp) reticle.matrix.makeTranslation(fp.x, fp.y, fp.z); else reticle.visible = false;
     }
     reticle.userData.mat.color.set(centerHit.kind === 'wall' ? 0xffd166 : 0xffffff);
+  }
+
+  // Pieces drop the last few centimeters onto the floor when you let go
+  const now = performance.now();
+  for (const it of items) {
+    if (it.dropAt === undefined) continue;
+    const k = (now - it.dropAt) / 240;
+    if (k >= 1) { it.model.position.y = 0; delete it.dropAt; continue; }
+    it.model.position.y = 0.05 * (1 - k) * (1 - k);
   }
 
   // Selected outline pulse
@@ -839,6 +862,185 @@ function loop(t, frame) {
   if (t - lastUi > 250) { lastUi = t; updateStatus(); }
   renderer.render(scene, camera);
 }
+
+// ---------- Room setup: set the floor, then mark the walls ----------
+// Step 1 sets the floor height: in AR, the surface under the circle; in basic camera mode, the phone's
+// height above the floor (a 1 m square on the floor helps get it right). Step 2 marks walls: aim the
+// circle (or tap) where a wall meets the floor, at two spots along it. Furniture can't go through
+// marked walls, and sofas and chairs turn their backs to them.
+
+let setup = null; // null | { step: 'floor' | 'walls', pending: Vector3 | null }
+
+const meterSquare = new THREE.LineLoop(
+  new THREE.BufferGeometry().setFromPoints([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, z]) => new THREE.Vector3(x, 0, z))),
+  new THREE.LineBasicMaterial({ color: 0x5fe0c8, transparent: true, depthTest: false }),
+);
+meterSquare.renderOrder = 5;
+meterSquare.visible = false;
+scene.add(meterSquare);
+
+const pendingMark = new THREE.Mesh(new THREE.RingGeometry(0.05, 0.075, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffd166, depthTest: false, transparent: true }));
+pendingMark.rotation.x = -Math.PI / 2;
+pendingMark.renderOrder = 5;
+pendingMark.visible = false;
+scene.add(pendingMark);
+
+const wallLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+  new THREE.LineBasicMaterial({ color: 0xffd166, depthTest: false, transparent: true }));
+wallLine.renderOrder = 5;
+wallLine.visible = false;
+scene.add(wallLine);
+
+const previewWall = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dotsShader(true));
+previewWall.renderOrder = 3;
+previewWall.visible = false;
+previewWall.raycast = () => {};
+scene.add(previewWall);
+
+// Where the circle points on the floor
+function aimPoint() {
+  if (surfaces.floorY === null) return null;
+  if (mode === 'ar' && centerHit?.kind === 'floor' && Math.abs(centerHit.p.y - surfaces.floorY) < 0.05) return centerHit.p.clone().setY(surfaces.floorY);
+  return floorPoint(innerWidth / 2, innerHeight / 2);
+}
+
+function openSetup() {
+  setup = { step: 'floor', pending: null };
+  select(null);
+  hud.classList.add('setup');
+  renderSetup();
+}
+
+function closeSetup() {
+  setup = null;
+  hud.classList.remove('setup');
+  meterSquare.visible = pendingMark.visible = wallLine.visible = previewWall.visible = false;
+  layoutTools();
+  updateHint();
+}
+
+function renderSetup() {
+  if (!setup) return;
+  const floorStep = setup.step === 'floor';
+  $('stFloor').className = floorStep ? 'on' : 'done';
+  $('stWalls').className = floorStep ? '' : 'on';
+  $('heightRow').style.display = floorStep && mode === 'camera' ? '' : 'none';
+  $('height').value = camHeight;
+  $('heightVal').textContent = `${camHeight.toFixed(2)} m`;
+  const main = $('setupMain'), alt = $('setupAlt'), done = $('setupDone');
+  const n = surfaces.manualWalls.length;
+  if (floorStep) {
+    $('setupTitle').textContent = 'Set the floor';
+    $('setupText').textContent = mode === 'camera'
+      ? 'Aim at the floor. Slide until the green square looks like 1 × 1 m on your floor, then tap Set floor.'
+      : surfaces.floorY === null ? 'Point at the floor and move the phone slowly until the dots appear.'
+      : 'Aim the circle at the floor (not a table or rug edge) and tap Set floor.';
+    main.textContent = 'Set floor';
+    main.disabled = mode === 'ar' && surfaces.floorY === null;
+    alt.textContent = 'Skip';
+    done.style.display = 'none';
+  } else {
+    $('setupTitle').textContent = n ? `${n} wall${n > 1 ? 's' : ''} marked` : 'Mark the walls';
+    $('setupText').textContent = setup.pending
+      ? 'Now aim at another spot along the bottom of the same wall, and tap Add point.'
+      : n ? 'Mark another wall the same way, or tap Done.'
+      : 'Aim the circle where a wall meets the floor and tap Add point (or tap that spot on the screen). Then do it again further along the same wall.';
+    main.textContent = 'Add point';
+    main.disabled = false;
+    alt.textContent = 'Undo';
+    alt.disabled = !setup.pending && !n;
+    done.style.display = '';
+  }
+}
+
+function setFloor() {
+  if (mode === 'ar') {
+    if (centerHit?.kind === 'floor') surfaces.lockedY = centerHit.p.y;
+    else if (surfaces.floorY !== null) surfaces.lockedY = surfaces.floorY;
+    else { toast('Point at the floor first'); return; }
+    surfaces.floorY = surfaces.lockedY;
+  }
+  buzz(15);
+  toast('Floor set');
+  setup.step = 'walls';
+  renderSetup();
+}
+
+function addWallPoint(p) {
+  if (!setup || setup.step !== 'walls') return;
+  if (!p) { toast('Aim at the floor, where it meets the wall'); return; }
+  if (!setup.pending) { setup.pending = p; buzz(10); renderSetup(); return; }
+  const a = setup.pending;
+  if (a.distanceTo(p) < 0.3) { toast('Go a bit further along the wall'); return; }
+  const t = p.clone().sub(a).setY(0).normalize();
+  let n = new THREE.Vector3(-t.z, 0, t.x);
+  if (n.dot(camPos.clone().sub(a)) < 0) n.negate(); // face into the room
+  const ta = t.dot(a), tp = t.dot(p);
+  // Walls are usually longer than the stretch you mark, so they reach a meter further each way
+  surfaces.manualWalls.push({ n, d: n.dot(a), t, tmin: Math.min(ta, tp) - 1, tmax: Math.max(ta, tp) + 1, manual: true, count: 99 });
+  setup.pending = null;
+  buzz(25);
+  toast('Wall added');
+  // Push already placed pieces out of the new wall
+  for (const it of items) { const r = fitToWalls(it, it.root.position.clone(), it.yaw, false); if (r.p.distanceTo(it.root.position) > 0.005) { it.setPos(r.p); pin(it); } }
+  renderSetup();
+}
+
+function updateSetupViz() {
+  const on = !!setup && surfaces.floorY !== null;
+  const aim = on ? aimPoint() : null;
+  meterSquare.visible = on && setup.step === 'floor' && !!aim;
+  if (meterSquare.visible) {
+    meterSquare.position.copy(aim).setY(surfaces.floorY + 0.004);
+    meterSquare.rotation.y = Math.atan2(camPos.x - aim.x, camPos.z - aim.z);
+  }
+  const p = setup?.pending;
+  pendingMark.visible = !!p;
+  wallLine.visible = previewWall.visible = !!(p && aim && p.distanceTo(aim) > 0.05);
+  if (p) pendingMark.position.copy(p).setY(surfaces.floorY + 0.005);
+  if (wallLine.visible) {
+    wallLine.geometry.setFromPoints([p.clone().setY(surfaces.floorY + 0.005), aim.clone().setY(surfaces.floorY + 0.005)]);
+    const mid = p.clone().add(aim).multiplyScalar(0.5);
+    const len = p.distanceTo(aim), h = 2.4;
+    previewWall.position.set(mid.x, surfaces.floorY + h / 2, mid.z);
+    previewWall.scale.set(len, h, 1);
+    const t = aim.clone().sub(p).setY(0).normalize();
+    const n = new THREE.Vector3(-t.z, 0, t.x);
+    if (n.dot(camPos.clone().sub(p)) < 0) n.negate();
+    previewWall.lookAt(previewWall.position.clone().add(n));
+    const u = previewWall.material.uniforms;
+    u.size.value.set(len, h);
+    u.center.value.copy(mid);
+    u.opacity.value = 0.8;
+  }
+  if (setup?.step === 'floor' && mode === 'ar') {
+    const dis = surfaces.floorY === null;
+    if ($('setupMain').disabled !== dis) renderSetup();
+  }
+}
+
+$('setupMain').onclick = () => {
+  if (!setup) return;
+  if (setup.step === 'floor') setFloor();
+  else addWallPoint(aimPoint());
+};
+$('setupAlt').onclick = () => {
+  if (!setup) return;
+  if (setup.step === 'floor') { setup.step = 'walls'; renderSetup(); return; }
+  if (setup.pending) setup.pending = null;
+  else surfaces.manualWalls.pop();
+  renderSetup();
+};
+$('setupDone').onclick = () => {
+  closeSetup();
+  toast(surfaces.walls().length ? 'Room ready: drag furniture in' : 'Drag furniture in');
+};
+$('btnRoom').onclick = () => (setup ? closeSetup() : openSetup());
+$('height').oninput = (e) => {
+  camHeight = +e.target.value;
+  $('heightVal').textContent = `${camHeight.toFixed(2)} m`;
+};
 
 // ---------- HUD ----------
 
@@ -858,12 +1060,11 @@ function updateStatus() {
   const floor = surfaces.floorY !== null;
   const walls = surfaces.walls().length;
   const cf = $('chipFloor'), cw = $('chipWalls'), cl = $('chipLight');
-  $('chipHeight').classList.toggle('off', mode !== 'camera');
   if (mode === 'camera') {
     cf.classList.add('ok'); cf.lastElementChild.textContent = 'Basic camera';
     cw.classList.add('off');
     cl.classList.toggle('off', !lightSeen); cl.classList.add('ok');
-    $('scan').classList.toggle('hide', performance.now() - modeStarted > 5000 || items.length > 0);
+    $('scan').classList.toggle('hide', !!setup || performance.now() - modeStarted > 5000 || items.length > 0);
     updateHint();
     return;
   }
@@ -1012,11 +1213,11 @@ const angleOf = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
 const distOf = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
 hud.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('#tools, #tray, .top')) return;
+  if (e.target.closest('#tools, #tray, .top, #setup')) return;
   hud.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
   if (pointers.size === 1) {
-    const item = pickItem(e.clientX, e.clientY);
+    const item = setup ? null : pickItem(e.clientX, e.clientY);
     if (item) {
       select(item);
       const fp = floorPoint(e.clientX, e.clientY);
@@ -1066,7 +1267,10 @@ function pointerEnd(e) {
   pointers.delete(e.pointerId);
   if (!gesture) return;
   if (gesture.type === 'move' && gesture.moved) { pin(gesture.item); buzz(10); }
-  if ((gesture.type === 'tap' || gesture.type === 'orbit') && !gesture.moved) select(null);
+  if ((gesture.type === 'tap' || gesture.type === 'orbit') && !gesture.moved) {
+    if (setup?.step === 'walls') addWallPoint(floorPoint(e.clientX, e.clientY));
+    else select(null);
+  }
   if (gesture.type === 'twist' || gesture.type === 'pinch') { gesture = null; return; }
   if (!pointers.size) gesture = null;
 }
@@ -1118,12 +1322,6 @@ $('btnClear').onclick = () => {
   clearArmed = 0;
   toast('Room cleared');
 };
-const HEIGHTS = [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7];
-$('chipHeight').onclick = () => {
-  camHeight = HEIGHTS[(HEIGHTS.indexOf(camHeight) + 1) % HEIGHTS.length];
-  $('chipHeight').lastElementChild.textContent = `Phone at ${camHeight.toFixed(1)} m`;
-  toast('Furniture too big? Raise the phone height. Too small? Lower it.');
-};
 $('btnExit').onclick = () => {
   const s = renderer.xr.getSession();
   if (s) s.end(); else leaveMode();
@@ -1150,7 +1348,7 @@ async function makeThumbs() {
     const m = buildFurniture(type, 0);
     s.add(m);
     const [w, d, h] = CATALOG[type].dims;
-    const size = Math.max(w, h * 1.25, d);
+    const size = Math.max(w * 0.85, h * 1.25, d);
     const dir = new THREE.Vector3(0.75, 0.55, 1).normalize();
     cam.position.copy(dir.multiplyScalar(size * 2.25)).add(new THREE.Vector3(0, h * 0.45, 0));
     cam.lookAt(0, h * 0.45, 0);
@@ -1166,6 +1364,7 @@ async function makeThumbs() {
 }
 
 async function boot() {
+  await loadModels((f) => { $('loading').textContent = `Getting the furniture ready… ${Math.round(f * 100)}%`; });
   const thumbs = await makeThumbs();
   buildCards(thumbs);
   $('heroSofa').src = thumbs.sofa;
@@ -1225,6 +1424,6 @@ addEventListener('resize', () => {
 });
 
 // For automated checks: window.__roomfit exposes a little of the state.
-window.__roomfit = { items, surfaces, tapPlace, select: (i) => select(items[i]), get mode() { return mode; } };
+window.__roomfit = { scene, items, surfaces, tapPlace, select: (i) => select(items[i]), get mode() { return mode; } };
 
 boot();
