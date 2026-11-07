@@ -9,8 +9,14 @@ chair, a 3-seat sofa and a dining table, each in several finishes.
 
 - **Camera AR:** an Android phone with Chrome and *Google Play Services for AR*
   (most phones from the last few years; Chrome installs it when asked).
-- **iPhone and computers:** Safari can't run web AR yet, so these get the
-  **3D room** instead: the same furniture and controls in a virtual room.
+- **Any other phone:** basic camera mode. Stand in one spot and turn the phone;
+  furniture stays fixed while you turn, and the light is matched from the
+  camera picture. It can't find walls or follow you as you walk, and it
+  assumes the phone is at chest height (tap **Phone at 1.4 m** at the top to
+  change it if pieces look too big or too small). The start screen says why
+  full AR isn't available and how to fix it (open in Chrome, or install Google
+  Play Services for AR).
+- **Computers:** the **3D room**: the same furniture and controls in a virtual room.
 
 Add it to the home screen (Chrome menu → *Install app*) to open it like an app.
 After the first visit it also works offline.
