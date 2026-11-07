@@ -49,6 +49,13 @@ After the first visit it also works offline.
    its finish, the copy button to add another of the same piece, or the bin to
    delete it. The round arrow at the top right removes everything (tap twice).
 
+8. **Photo:** tap the camera button at the top. You get a photo of the room
+   with the furniture (without the circle, outlines and dots) to **Save** to
+   the phone or **Share**, for example to WhatsApp. In full AR the room is in
+   the photo only on phones where Chrome lets web pages read the camera
+   picture; otherwise the photo shows the furniture on a plain background,
+   and the app says so.
+
 Walk around: each piece is pinned to the room, so it stays where you put it.
 Pieces always stand on the floor you set: they drop onto it when you let go,
 stay upright, and follow the floor height if you set it again.
@@ -65,6 +72,7 @@ three.js (in `vendor/`, MIT license):
 | `anchors` | Each piece is pinned to the room once you let go, so it stays put while you walk around. |
 | `light-estimation` | The room's main light direction, color and brightness, its ambient light, and a reflection map light the furniture. Shadows fall the same way as the room's, and are crisp or soft to match. Before an estimate arrives (or on phones without it), a neutral studio light is used. |
 | `dom-overlay` | The buttons and the catalog are drawn over the camera view. |
+| `camera-access` | (When the phone offers it) the camera picture for photos. |
 
 The furniture comes from glTF models (`models/`) at real size, with velvet
 sheen and the colors stored in the files. Each is placed so its lowest point
