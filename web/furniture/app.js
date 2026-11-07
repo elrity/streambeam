@@ -426,7 +426,7 @@ async function startAR() {
   try {
     session = await navigator.xr.requestSession('immersive-ar', {
       requiredFeatures: ['hit-test'],
-      optionalFeatures: ['dom-overlay', 'anchors', 'plane-detection', 'light-estimation'],
+      optionalFeatures: ['dom-overlay', 'anchors', 'plane-detection', 'light-estimation', 'camera-access'],
       domOverlay: { root: hud },
     });
   } catch (e) {
@@ -444,6 +444,7 @@ async function startAR() {
     return session.requestHitTestSource({ space: viewer, offsetRay: new XRRay({ x: 0, y: 0, z: 0 }, { x: x / l, y: y / l, z: -1 / l }) }).catch(() => null);
   }))).filter(Boolean);
 
+  if ('XRWebGLBinding' in window) { try { glBinding = new XRWebGLBinding(session, renderer.getContext()); } catch { glBinding = null; } }
   startLightEstimation(session);
 }
 
@@ -457,7 +458,7 @@ async function startLightEstimation(session) {
       const gl = renderer.getContext();
       if (session.preferredReflectionFormat === 'srgba8') gl.getExtension('EXT_sRGB');
       if (session.preferredReflectionFormat === 'rgba16f') gl.getExtension('OES_texture_half_float');
-      glBinding = new XRWebGLBinding(session, gl);
+      glBinding ||= new XRWebGLBinding(session, gl);
       cubeRT = new THREE.WebGLCubeRenderTarget(16);
       xrProbe.addEventListener('reflectionchange', () => { reflectionDirty = true; });
     } catch { glBinding = null; }
@@ -501,6 +502,7 @@ function xrFrame(frame) {
   const pose = frame.getViewerPose(ref);
   if (!pose) return;
   const view = pose.views[0];
+  if (shotWanted) grabCameraImage(view); // the camera picture can only be read during the frame
   pickCam.projectionMatrix.fromArray(view.projectionMatrix);
   pickCam.projectionMatrixInverse.copy(pickCam.projectionMatrix).invert();
   pickCam.matrixWorld.fromArray(view.transform.matrix);
@@ -860,6 +862,8 @@ function loop(t, frame) {
   }
 
   if (t - lastUi > 250) { lastUi = t; updateStatus(); }
+  if (shotWanted && mode !== 'ar') shotWanted.cam = null;
+  if (shotWanted && (mode !== 'ar' || shotWanted.cam !== undefined)) finishPhoto();
   renderer.render(scene, camera);
 }
 
@@ -1042,6 +1046,159 @@ $('height').oninput = (e) => {
   $('heightVal').textContent = `${camHeight.toFixed(2)} m`;
 };
 
+// ---------- Photo of the room with the furniture ----------
+// Basic camera: the camera picture plus the furniture. Full AR: the camera picture when Chrome
+// offers it to web pages ('camera-access'); otherwise the furniture and its shadows on a plain backdrop.
+// The 3D layer is drawn again off screen without the circle, outlines and dots.
+
+let shotWanted = null; // { cam: undefined (waiting) | null (no picture) | { w, h, px } }
+const shotRT = new THREE.WebGLRenderTarget(1, 1);
+shotRT.texture.colorSpace = THREE.SRGBColorSpace;
+shotRT.isXRRenderTarget = true; // three.js then applies the screen's tone mapping and sRGB output, so photos match the view
+const shotCam = new THREE.PerspectiveCamera();
+shotCam.matrixAutoUpdate = false;
+
+function takePhoto() {
+  if (!mode || shotWanted) return;
+  select(null);
+  shotWanted = { cam: undefined };
+  setTimeout(() => { if (shotWanted && shotWanted.cam === undefined) shotWanted.cam = null; }, 600);
+}
+
+function grabCameraImage(view) {
+  if (shotWanted.cam !== undefined) return;
+  shotWanted.cam = null;
+  const cam = view.camera;
+  if (!cam || !glBinding?.getCameraImage) return;
+  try {
+    const tex = glBinding.getCameraImage(cam);
+    if (!tex) return;
+    const gl = renderer.getContext();
+    const prev = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const px = new Uint8Array(cam.width * cam.height * 4);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+      gl.readPixels(0, 0, cam.width, cam.height, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      shotWanted.cam = { w: cam.width, h: cam.height, px };
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, prev);
+    gl.deleteFramebuffer(fb);
+  } catch (e) { console.warn('camera picture', e); }
+}
+
+// Pixels read from WebGL start at the bottom row
+function pixelsToCanvas(w, h, px) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const img = g.createImageData(w, h);
+  const row = w * 4;
+  for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+function finishPhoto() {
+  const shot = shotWanted;
+  shotWanted = null;
+  const scale = Math.min(2, devicePixelRatio || 1, 2048 / Math.max(innerWidth, innerHeight));
+  const W = Math.round(innerWidth * scale), H = Math.round(innerHeight * scale);
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const g = out.getContext('2d');
+
+  // 1. The room
+  let roomPictured = true;
+  if (mode === 'camera' && video.videoWidth) {
+    const vw = video.videoWidth, vh = video.videoHeight, k = Math.max(W / vw, H / vh);
+    g.drawImage(video, (W - vw * k) / 2, (H - vh * k) / 2, vw * k, vh * k);
+  } else if (mode === 'ar' && shot.cam) {
+    g.drawImage(pixelsToCanvas(shot.cam.w, shot.cam.h, shot.cam.px), 0, 0, W, H);
+  } else if (mode === 'ar') {
+    roomPictured = false;
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#f4f1ec'); grd.addColorStop(1, '#ddd6cb');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  }
+
+  // 2. The furniture and shadows, without the helpers
+  const helpers = [reticle, floorGrid, meterSquare, pendingMark, wallLine, previewWall, ...wallViz.values(), ...items.map((i) => i.outline)];
+  const was = helpers.map((o) => o.visible);
+  helpers.forEach((o) => { o.visible = false; });
+  shotCam.projectionMatrix.copy(pickCam.projectionMatrix);
+  shotCam.projectionMatrixInverse.copy(pickCam.projectionMatrixInverse);
+  shotCam.matrixWorld.copy(pickCam.matrixWorld);
+  shotCam.matrixWorldInverse.copy(pickCam.matrixWorldInverse);
+  shotRT.setSize(W, H);
+  const prevTarget = renderer.getRenderTarget(), xrOn = renderer.xr.enabled;
+  renderer.xr.enabled = false;
+  renderer.setRenderTarget(shotRT);
+  renderer.setClearColor(0x000000, 0);
+  renderer.clear();
+  renderer.render(scene, shotCam);
+  const px = new Uint8Array(W * H * 4);
+  renderer.readRenderTargetPixels(shotRT, 0, 0, W, H, px);
+  renderer.setRenderTarget(prevTarget);
+  renderer.xr.enabled = xrOn;
+  helpers.forEach((o, i) => { o.visible = was[i]; });
+  g.drawImage(pixelsToCanvas(W, H, px), 0, 0);
+
+  // 3. A small mark in the corner
+  const fs = Math.round(H * 0.018);
+  g.font = `600 ${fs}px system-ui, sans-serif`;
+  g.textAlign = 'right';
+  g.fillStyle = 'rgba(255,255,255,.85)';
+  g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = fs * 0.4;
+  g.fillText('RoomFit', W - fs, H - fs);
+
+  flash();
+  buzz(30);
+  out.toBlob((blob) => blob && showPhoto(blob, roomPictured), 'image/jpeg', 0.92);
+}
+
+function flash() {
+  const f = $('flash');
+  f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+}
+
+let photoBlob = null, photoUrl = null;
+function showPhoto(blob, roomPictured) {
+  photoBlob = blob;
+  if (photoUrl) URL.revokeObjectURL(photoUrl);
+  photoUrl = URL.createObjectURL(blob);
+  $('photoImg').src = photoUrl;
+  $('photoNote').textContent = roomPictured ? ''
+    : 'This phone doesn’t let web pages save the camera picture in full AR, so the photo shows the furniture on a plain background.';
+  const file = new File([blob], photoName(), { type: 'image/jpeg' });
+  $('photoShare').style.display = navigator.canShare?.({ files: [file] }) ? '' : 'none';
+  $('photo').classList.add('on');
+}
+
+function photoName() {
+  const d = new Date(), z = (n) => String(n).padStart(2, '0');
+  return `RoomFit-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.jpg`;
+}
+
+$('btnShot').onclick = takePhoto;
+$('photoClose').onclick = () => $('photo').classList.remove('on');
+$('photoSave').onclick = () => {
+  if (!photoUrl) return;
+  const a = document.createElement('a');
+  a.href = photoUrl;
+  a.download = photoName();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast('Photo saved to Downloads');
+};
+$('photoShare').onclick = async () => {
+  if (!photoBlob) return;
+  try { await navigator.share({ files: [new File([photoBlob], photoName(), { type: 'image/jpeg' })], title: 'RoomFit' }); }
+  catch (e) { if (e?.name !== 'AbortError') toast('Could not share the photo'); }
+};
+
 // ---------- HUD ----------
 
 let toastTimer = 0;
@@ -1213,7 +1370,7 @@ const angleOf = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
 const distOf = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
 
 hud.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('#tools, #tray, .top, #setup')) return;
+  if (e.target.closest('#tools, #tray, .top, #setup, #photo')) return;
   hud.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
   if (pointers.size === 1) {
@@ -1424,6 +1581,6 @@ addEventListener('resize', () => {
 });
 
 // For automated checks: window.__roomfit exposes a little of the state.
-window.__roomfit = { scene, items, surfaces, tapPlace, select: (i) => select(items[i]), get mode() { return mode; } };
+window.__roomfit = { takePhoto, get photoBlob() { return photoBlob; }, scene, items, surfaces, tapPlace, select: (i) => select(items[i]), get mode() { return mode; } };
 
 boot();

@@ -1,5 +1,5 @@
 // RoomFit service worker: keeps the app working offline once it has been opened.
-const CACHE = 'roomfit-v3';
+const CACHE = 'roomfit-v4';
 const SHELL = ['./', 'app.js', 'furniture.js', 'manifest.webmanifest', 'vendor/three.module.min.js',
   'vendor/RoundedBoxGeometry.js', 'vendor/RoomEnvironment.js', 'vendor/loaders/GLTFLoader.js',
   'vendor/utils/BufferGeometryUtils.js', 'models/armchair.glb', 'models/sofa.glb', 'models/dining-table.glb', 'models/coffee-table.glb', 'icons/icon-192.png', 'icons/icon-512.png'];
