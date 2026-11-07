@@ -1,5 +1,6 @@
-# Builds the StreamBeam Android app (APK) that opens your hosted StreamBeam full screen.
-# Every change to android/ builds and releases an APK for the GitHub Pages address.
+# Builds both Android editions (APKs) that open your hosted StreamBeam full screen:
+#   StreamBeam (app.streambeam.caster) and Rity IPTV, the IPTV-only edition (app.rity.iptv).
+# Every change to android/ builds and releases both APKs for the GitHub Pages address.
 # To build for another address: Actions → "Android APK" → Run workflow, or set the APP_URL variable.
 name: Android APK
 
@@ -40,7 +41,7 @@ jobs:
             APP_URL=https://example.com
             echo "CHECK_BUILD=1" >> "$GITHUB_ENV"
           fi
-          node android/configure.mjs "$APP_URL" app.streambeam.caster "1.${{ github.run_number }}"
+          node android/configure.mjs "$APP_URL" app.streambeam.caster "1.${{ github.run_number }}" app.rity.iptv
           echo "APP_HOST=$(grep '^host=' android/twa.properties | cut -d= -f2)" >> "$GITHUB_ENV"
           echo "APP_URL=$(grep '^url=' android/twa.properties | cut -d= -f2-)" >> "$GITHUB_ENV"
 
@@ -55,7 +56,7 @@ jobs:
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret, so the APK is signed with a temporary debug key. It installs fine, but each new build must replace the old one by uninstalling it first. See android/README.md to add a permanent key."
           fi
 
-      - name: Build the APK
+      - name: Build the APKs
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
@@ -64,23 +65,30 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon --stacktrace assembleRelease
+        run: ./gradlew --no-daemon --stacktrace assembleStreambeamRelease assembleIptvRelease
 
-      - name: Name the APK and write assetlinks.json
+      - name: Name the APKs and write assetlinks.json
         run: |
           mkdir -p out
           APK="out/StreamBeam-1.${{ github.run_number }}.apk"
-          cp android/app/build/outputs/apk/release/app-release.apk "$APK"
+          IPTV_APK="out/RityIPTV-1.${{ github.run_number }}.apk"
+          cp android/app/build/outputs/apk/streambeam/release/app-streambeam-release.apk "$APK"
+          cp android/app/build/outputs/apk/iptv/release/app-iptv-release.apk "$IPTV_APK"
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify "$APK"
+          "$BUILD_TOOLS/apksigner" verify "$IPTV_APK"
           SHA=$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK" | grep -m1 'SHA-256 digest' | awk '{print $NF}' | tr a-f A-F | sed 's/../&:/g; s/:$//')
-          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"app.streambeam.caster","sha256_cert_fingerprints":["%s"]}}]\n' "$SHA" > out/assetlinks.json
+          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"app.streambeam.caster","sha256_cert_fingerprints":["%s"]}},{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"app.rity.iptv","sha256_cert_fingerprints":["%s"]}}]\n' "$SHA" "$SHA" > out/assetlinks.json
           echo "APK=$APK" >> "$GITHUB_ENV"
+          echo "IPTV_APK=$IPTV_APK" >> "$GITHUB_ENV"
           echo "CERT_SHA=$SHA" >> "$GITHUB_ENV"
           {
-            echo "### StreamBeam APK for $APP_URL"
+            echo "### StreamBeam and Rity IPTV APKs for $APP_URL"
             echo ""
-            echo "Download it from the artifacts below${CHECK_BUILD:+ (check build only, not for installing)}."
+            echo "Download them from the artifacts below${CHECK_BUILD:+ (check build only, not for installing)}."
+            echo ""
+            echo "- \`$(basename "$APK")\`: StreamBeam (app.streambeam.caster)"
+            echo "- \`$(basename "$IPTV_APK")\`: Rity IPTV, IPTV only (app.rity.iptv)"
             echo ""
             echo "Signing certificate SHA-256 (to hide the browser bar, see android/README.md): \`$SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -95,11 +103,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "android-1.${{ github.run_number }}" "$APK" out/assetlinks.json \
+          gh release create "android-1.${{ github.run_number }}" "$APK" "$IPTV_APK" out/assetlinks.json \
             --target "${{ github.sha }}" \
-            --title "StreamBeam for Android 1.${{ github.run_number }}" \
-            --notes "StreamBeam for Android: opens $APP_URL as an app.
+            --title "StreamBeam and Rity IPTV for Android 1.${{ github.run_number }}" \
+            --notes "Two apps, built from the same code: they install side by side.
 
-          **Install:** on your Android phone, download the .apk below and open it. Allow installing from your browser when asked; if Play Protect warns about an unknown developer, tap More details → Install anyway.
+          - **$(basename "$APK")**: StreamBeam, opens $APP_URL as an app.
+          - **$(basename "$IPTV_APK")**: Rity IPTV, the IPTV-only edition (live TV, movies, series).
+
+          **Install:** on your Android phone, download the .apk you want below and open it. Allow installing from your browser when asked; if Play Protect warns about an unknown developer, tap More details → Install anyway.
 
           Signing certificate SHA-256: $CERT_SHA"

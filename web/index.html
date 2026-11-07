@@ -270,11 +270,17 @@ select.btn { appearance: none; -webkit-appearance: none; border: 0; font: inheri
 .cw-bar i { display: block; height: 100%; background: var(--warm); }
 .cw-t { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cw-s { font-size: 11px; color: var(--muted, #8a8c92); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: -3px; }
+/* Rity IPTV edition: logo on the home screen, IPTV keypad sized to its rows, history under each section */
+.ed-logo { display: block; width: min(64vw, 30vh, 300px); aspect-ratio: 1; border-radius: 50%; filter: drop-shadow(10px 14px 16px var(--lo)) drop-shadow(-6px -6px 10px var(--hi)); }
+.grid.rows { width: min(100cqw, calc(100cqh * 3 / var(--rows)), 460px); height: calc(min(100cqw, calc(100cqh * 3 / var(--rows)), 460px) * var(--rows) / 3); grid-template-rows: repeat(var(--rows), 1fr); }
+.hbar { display: block; height: 3px; margin-top: 6px; border-radius: 2px; background: var(--lo); overflow: hidden; }
+.hbar i { display: block; height: 100%; background: var(--warm); }
 .toast { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); max-width: calc(100% - 36px); padding: 12px 20px; border-radius: 14px; background: var(--sheet); box-shadow: 0 8px 24px var(--lo); font-size: 14px; text-align: center; }
 
 /* Landscape and short screens: side by side, tighter */
 @media (orientation: landscape) and (min-width: 560px) {
   .home-body { flex-direction: row; align-items: center; gap: 4vw; }
+  .ed-logo { width: min(36vw, 54vh, 320px); }
   .hero { flex: 1; gap: 1.5vh; }
   .emblem-btn { width: min(38vw, 56vh, 360px); }
   .c-title { font-size: clamp(22px, 6vh, 36px); max-width: 40vw; }
@@ -411,6 +417,26 @@ const store = {
   set(k, v) { try { localStorage.setItem('sb.' + k, JSON.stringify(v)); } catch {} }
 };
 
+/* ---------- Edition ----------
+   Rity IPTV is the IPTV-only edition of this same page: the Android flavor "iptv" adds SBEdition/iptv to the
+   user agent. In a browser, ?edition=iptv turns it on (remembered on this device) and ?edition=full turns it off.
+   It opens on the IPTV keypad, hides the other sections, mirroring, the idle screen and the hotspot prompt. */
+const ED = (() => {
+  const q = new URLSearchParams(location.search).get('edition');
+  let saved = '';
+  try { if (q === 'iptv') localStorage.setItem('sb.edition', 'iptv'); else if (q) localStorage.removeItem('sb.edition'); saved = localStorage.getItem('sb.edition') || ''; } catch {}
+  return /SBEdition\/iptv/.test(navigator.userAgent) || saved === 'iptv';
+})();
+const APP_NAME = ED ? 'Rity IPTV' : 'StreamBeam';
+const ED_VIEWS = ['iptv', 'player', 'settings'];
+const ED_TABS = ['live', 'movies', 'series', 'free', 'search'];
+if (ED) {
+  document.title = APP_NAME;
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', APP_NAME);
+  document.querySelector('link[rel="icon"]')?.setAttribute('href', 'icons/rity-iptv-64.png');
+  document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute('href', 'icons/rity-iptv.webp');
+}
+
 /* ---------- Sample content (public test media) ---------- */
 const G = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
 /* Formats browsers can't decode on their own; VLC plays them */
@@ -470,7 +496,7 @@ const DEMO = [
 /* ---------- State ---------- */
 const S = {
   view: 'home',
-  libTab: 'history', setOpen: 'Look', iptvSrc: 'samples', tv: { tab: 'home' },
+  libTab: 'history', setOpen: ED ? 'Playlists' : 'Look', iptvSrc: 'samples', tv: { tab: 'home' },
   accounts: store.get('accounts', []), acc: store.get('acc', ''),
   url: '',
   detected: [],
@@ -594,13 +620,22 @@ function load(item, startAt = 0) {
     ncall('proxy', { url: item.url }).then(r => { if (P.item === item) begin(r.url); }).catch(() => { if (P.item === item) begin(item.url); });
   } else begin(item.url);
 }
+/* The length can arrive after the metadata (HLS) or not at all (servers that don't send a size): a movie
+   or episode then seeks within what the browser can reach. Only true live streams have no seek bar. */
+function videoDuration() {
+  const d = video.duration;
+  if (isFinite(d) && d > 0) { P.dur = d; P.live = false; return; }
+  const sk = video.seekable, end = sk && sk.length ? sk.end(sk.length - 1) : 0;
+  if (P.item && !P.item.live && isFinite(end) && end > 0) { P.dur = end; P.live = false; } else P.live = true;
+}
 video.addEventListener('loadedmetadata', () => {
   P.real = true;
-  if (isFinite(video.duration) && video.duration > 0) { P.dur = video.duration; P.live = false; } else P.live = true;
-  if (P.pos) video.currentTime = P.pos;
+  videoDuration();
+  if (P.pos && !P.live) video.currentTime = P.pos;
   if (P.playing) video.play().catch(() => {});
   renderScreen();
 });
+video.addEventListener('durationchange', () => { if (P.real) { videoDuration(); tick(); } });
 video.addEventListener('error', () => { P.real = false; if (P.item && video.getAttribute('src')) P.vidErr = true; if (S.view === 'player') render(); else renderScreen(); });
 
 /* ---------- VLC ----------
@@ -702,7 +737,7 @@ function playItem(item, opts = {}) {
   else if (S.device === 'vlc') toast('VLC can’t open this. Playing here.');
   else if (S.device.startsWith('n:')) toast(P.yt ? 'YouTube plays here. Use Open in YouTube to cast it.' : 'This plays here, not on the screen.');
   logHistory();
-  if (!S.device) openDevices();
+  if (!S.device && !ED) openDevices();
   if (S.device === 'remote' && !P.yt) promptRemote();
   if (S.view === 'player') render(); else go('player');
 }
@@ -751,7 +786,7 @@ function onEnded() {
 function logHistory(posOverride) {
   if (!P.item) return;
   const pos = posOverride ?? P.pos;
-  S.history = [{ ...P.item, at: Date.now(), pos, dur: P.live ? 0 : P.dur || P.item.dur || 0 }, ...S.history.filter(h => h.url !== P.item.url)].slice(0, 80);
+  S.history = [{ ...P.item, at: Date.now(), pos, dur: P.live ? 0 : P.dur || P.item.dur || 0 }, ...S.history.filter(h => h.url !== P.item.url)].slice(0, ED ? 300 : 80);
   save();
 }
 let lastHist = 0;
@@ -769,6 +804,10 @@ setInterval(() => {
   if (Date.now() - lastHist > 5000) { lastHist = Date.now(); logHistory(); }
   tick();
 }, 250);
+
+/* Keep the place when the app goes to the background or closes, so Continue watching is exact */
+addEventListener('pagehide', () => { if (P.item) logHistory(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && P.item) logHistory(); });
 
 /* Subtitles (SRT/VTT parsed into cues; rendered on the TV screen) */
 function parseSubs(text) {
@@ -1071,7 +1110,7 @@ async function getText(url) {
     return r.text;
   }
   let r;
-  try { r = await fetch(url); } catch { throw new Error('This provider can only be reached from the StreamBeam app.'); }
+  try { r = await fetch(url); } catch { throw new Error('This provider can only be reached from the ' + APP_NAME + ' app.'); }
   if (!r.ok) throw new Error(`The server answered ${r.status}.`);
   return r.text();
 }
@@ -1165,7 +1204,7 @@ if (NB) {
   };
 }
 function ncall(cmd, args = {}) {
-  if (!NB) return Promise.reject(new Error('Only in the StreamBeam app'));
+  if (!NB) return Promise.reject(new Error('Only in the ' + APP_NAME + ' app'));
   return new Promise((res, rej) => {
     const id = ++N.seq; N.wait.set(id, { res, rej });
     NB.postMessage(JSON.stringify({ id, cmd, args }));
@@ -1252,10 +1291,16 @@ function push(view, tv) {
   try { history.pushState({ sb: view, tv: tv || null, d: depth }, '', '#' + view); } catch {}
 }
 function go(view) {
-  if (view === S.view || !(view in TITLES)) return;
-  if (view === 'iptv') { S.tv = { tab: 'home' }; S.chSearch = ''; } // IPTV always opens on its dashboard
+  if (view === S.view || !(view in TITLES) || (ED && !ED_VIEWS.includes(view))) return;
+  if (view === 'iptv') { S.tv = { tab: ED ? 'live' : 'home' }; S.chSearch = ''; } // IPTV always opens on its dashboard
   push(view, view === 'iptv' ? S.tv : null);
   S.view = view; render();
+}
+/* Rity IPTV: the home keypad opens an IPTV section directly (Back returns home) */
+function edOpen(tab) {
+  S.tv = { tab }; S.chSearch = '';
+  if (S.view === 'iptv') { push('iptv', S.tv); render(); return; }
+  push('iptv', S.tv); S.view = 'iptv'; render();
 }
 function tvGo(tv) { S.tv = tv; S.chSearch = ''; push('iptv', tv); render(); }
 function tvSet(tv) { S.tv = tv; try { history.replaceState({ ...(history.state || {}), tv }, ''); } catch {} render(); }
@@ -1305,7 +1350,23 @@ const clockStr = () => timeStr();
 const ringTime = () => { const [t, ap] = timeStr().split(' '); return `${t}<tspan class="ampm" dx="6">${ap || ''}</tspan>`; };
 const dateStr = () => new Date().toLocaleDateString(LOCALE, { weekday: 'short', day: 'numeric', month: 'short' });
 
+function edTiles() {
+  const m3u = acct()?.kind === 'm3u';
+  return [['live', 'tv', m3u ? 'Channels' : 'Live TV'], ...(m3u ? [] : [['movies', 'play', 'Movies'], ['series', 'list', 'Series']]),
+    ['free', 'globe', 'Free TV'], ['search', 'search', 'Search'], ['settings', 'gear', 'Settings']];
+}
+function edHomeView() {
+  const t = edTiles();
+  return `<div class="view home">
+    <div class="home-top"><span class="label">${APP_NAME}</span><span class="label" id="clock">${clockStr()}</span></div>
+    <div class="home-body">
+      <div class="hero"><img class="ed-logo" src="icons/rity-iptv.webp" alt="${APP_NAME}"></div>
+      <div class="pad"><nav class="grid rows" style="--rows:${Math.ceil(t.length / 3)}" aria-label="IPTV">${t.map(([v, ic, l]) => `<button class="go" ${v === 'settings' ? 'data-go="settings"' : `data-tvtab="${v}"`}>${icon(ic)}<span class="label">${l}</span></button>`).join('')}</nav></div>
+    </div>
+  </div>`;
+}
 function homeView() {
+  if (ED) return edHomeView();
   return `<div class="view home">
     <div class="home-top"><span class="label">StreamBeam</span><span class="label" id="clock">${clockStr()}</span></div>
     <div class="home-body">
@@ -1356,24 +1417,53 @@ function sectionView(v) {
   const sub = v === 'player' ? (dev ? dev.name : S.device === 'local' ? 'This device' : '') : v === 'today' ? dateStr() : '';
   const right = ['player', 'mirror', 'settings'].includes(v) ? '' : `<button class="round sm" data-act="devices" aria-label="Choose a screen">${icon('cast')}</button>`;
   return `<div class="view"><div class="head"><button class="round sm" data-act="home" aria-label="Back">${icon('left')}</button>
-    <div class="grow"><h1>${TITLES[v]}</h1>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>${right}</div>
+    <div class="grow"><h1>${ED && v === 'iptv' ? edTitle() : TITLES[v]}</h1>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>${right}</div>
     <div class="scroll"><div class="inner">${views[v]()}</div></div></div>`;
 }
 
 /* ---------- IPTV hub views ---------- */
-function tvLogin() {
+const edTitle = () => ({ live: acct()?.kind === 'm3u' ? 'Channels' : 'Live TV', movies: 'Movies', series: 'Series', series1: 'Series', free: 'Free TV', search: 'Search' })[S.tv.tab] || 'IPTV';
+/* Which IPTV section a played item belongs to (for the history under each section) */
+const secOf = h => h.sec || (h.ser || /\/series\//.test(h.url) ? 'series' : /\/movie\//.test(h.url) ? 'movies' : h.tv ? 'live' : '');
+/* Rity IPTV: what was played in this section, newest first, with how far it got. Tap to carry on. */
+function histPanel(sec) {
+  const seen = new Set();
+  const list = S.history.filter(h => secOf(h) === sec && (sec === 'free' || h.tv === S.acc)).filter(h => {
+    const k = h.ser ? 's:' + h.ser.id : h.url; if (seen.has(k)) return false; seen.add(k); return true;
+  }).slice(0, 30);
+  if (!list.length) return '';
+  const when = t => { const d = Math.floor((Date.now() - t) / 864e5); return d <= 0 ? timeStr(new Date(t)) : d === 1 ? 'Yesterday' : d + ' days ago'; };
+  return `<section class="panel"><div class="panel-t"><span class="label">History</span><div class="grow"></div><button class="btn flat sm" data-act="edClearHist" data-sec="${sec}">Clear</button></div>
+    ${list.map(h => {
+      const done = h.dur ? Math.min(100, h.pos / h.dur * 100) : 0;
+      const left = !h.live && h.dur && h.pos > 5 ? (h.dur - h.pos < 60 ? 'Watched' : fmt(h.dur - h.pos) + ' left') : '';
+      return `<button class="row" data-resume="${esc(h.url)}" style="width:100%;text-align:left">${thumb(h.logo ? h : { ...h, url: '' })}
+        <div class="meta"><div class="t">${esc(h.show || h.title)}</div><div class="s">${h.show ? `<span style="text-transform:none">${esc((h.ser?.season ? 'S' + h.ser.season + ' · ' : '') + h.title)}</span>` : ''}<span>${esc(when(h.at))}</span>${h.live ? '<span class="tag-LIVE">Live</span>' : ''}${left ? `<span>${esc(left)}</span>` : ''}</div>
+        ${done ? `<span class="hbar"><i style="width:${done}%"></i></span>` : ''}</div><span class="round sm acc">${icon('play')}</span></button>`;
+    }).join('')}</section>`;
+}
+/* Rity IPTV: playlists and logins live in Settings, not on the IPTV screens */
+function edAccounts() {
+  return S.accounts.map(x => {
+    const exp = x.exp ? 'Expires ' + new Date(x.exp * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const sub = [x.kind === 'm3u' ? 'M3U playlist' : 'Xtream code', x.kind === 'xtream' && x.user, exp, x.status && x.status !== 'Active' && x.status].filter(Boolean).join(' · ');
+    return `<div class="set"><span>${esc(x.name)}<span class="sub">${esc(sub)}</span></span>
+      <span class="acts">${x.id === S.acc ? '<span class="label acc">In use</span>' : `<button class="btn sm" data-act="tvUse" data-acc="${x.id}">Use</button>`}<button class="round sm" data-act="tvRemove" data-acc="${x.id}" aria-label="Remove ${esc(x.name)}">${icon('x')}</button></span></div>`;
+  }).join('') + `<div class="body" style="padding-top:14px">${tvLogin(true)}</div>`;
+}
+function tvLogin(inSettings) {
   const k = XT.kind;
   const f = (name, ph, type = 'text') => `<div class="field"><input name="${name}" type="${type === 'url' ? 'text' : type}" ${type === 'url' ? 'inputmode="url"' : ''} placeholder="${ph}" autocomplete="off" autocapitalize="off" spellcheck="false"></div>`;
   return `<div class="seg" role="group"><button data-act="tvKind" data-kind="xtream" aria-pressed="${k === 'xtream'}">Xtream code</button><button data-act="tvKind" data-kind="m3u" aria-pressed="${k === 'm3u'}">M3U link</button></div>
-    <form id="accForm" class="panel" style="padding:18px;display:flex;flex-direction:column;gap:12px" autocomplete="off" novalidate>
-      <div class="label">Your playlist</div>
+    <form id="accForm" class="${inSettings ? '' : 'panel'}" style="padding:${inSettings ? '4px 0 0' : '18px'};display:flex;flex-direction:column;gap:12px" autocomplete="off" novalidate>
+      <div class="label">${inSettings ? 'Add a playlist' : 'Your playlist'}</div>
       ${f('name', 'Any name')}
       ${k === 'xtream' ? f('user', 'Username') + f('pass', 'Password', 'password') + f('server', 'http://server.com:port', 'url') : f('url', 'http://…/playlist.m3u', 'url')}
       ${XT.err ? `<div class="note warn" style="padding:10px 14px">${esc(XT.err)}</div>` : ''}
       <button class="btn acc" type="submit" ${XT.busy ? 'disabled' : ''}>${XT.busy ? 'Checking…' : 'Add playlist'}</button></form>
-    ${!N.on ? '<div class="note">Provider logins work in the StreamBeam Android app.</div>' : ''}
-    <div class="pills" style="justify-content:flex-start"><button class="btn sm" data-act="tvFree">${icon('globe')}Free channels</button>
-      ${S.accounts.length ? `<button class="btn sm" data-act="tvHome">${icon('left')}My playlists</button>` : ''}</div>`;
+    ${!N.on ? `<div class="note">Provider logins work in the ${APP_NAME} Android app.</div>` : ''}
+    ${inSettings ? '' : `<div class="pills" style="justify-content:flex-start"><button class="btn sm" data-act="tvFree">${icon('globe')}Free channels</button>
+      ${S.accounts.length ? `<button class="btn sm" data-act="tvHome">${icon('left')}My playlists</button>` : ''}</div>`}`;
 }
 function tvHome(a) {
   const exp = a.exp ? new Date(a.exp * 1000).toLocaleDateString(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' }) : '';
@@ -1427,7 +1517,7 @@ function tvBrowse(a, t) {
   const err = xerr(key) || xerr(kind + ':cats');
   const catOpts = a.kind === 'm3u' ? cats.map(c => [c, c]) : cats.map(c => [c.category_id, c.category_name]);
   const title = { live: a.kind === 'm3u' ? 'Channels' : 'Live TV', movie: 'Movies', series: 'Series', search: 'Search' }[kind];
-  return `<div class="label">${title}</div>
+  return `${ED ? '' : `<div class="label">${title}</div>`}
     ${kind !== 'search' ? `<div class="field">${icon('list')}<select id="tvCat" aria-label="Category"><option value="">${a.kind === 'm3u' ? 'All channels' : 'Choose a category'}</option>${catOpts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(S.tv.cat || '') ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>` : ''}
     <div class="field">${icon('search')}<input id="chSearch" value="${esc(S.chSearch)}" placeholder="${kind === 'search' ? 'Search live, movies and series' : 'Search'}" aria-label="Search"></div>
     ${err ? `<div class="note warn">${esc(err)}<div class="acts"><button class="btn sm" data-act="tvRetry">Try again</button></div></div>` : ''}
@@ -1552,6 +1642,14 @@ const views = {
 
   iptv() {
     const a = acct(), t = S.tv.tab;
+    if (ED) {
+      if (t === 'free') return views.iptvFree() + histPanel('free');
+      if (!a) return `<div class="note">Add your IPTV playlist (Xtream code or M3U link) in Settings to watch live TV, movies and series.
+        <div class="acts"><button class="btn sm acc" data-act="edAddPlaylist">${icon('plus')}Add playlist</button><button class="btn sm" data-tvtab="free">${icon('globe')}Free TV</button></div></div>`;
+      if (t === 'series1') return tvSeries(a) + histPanel('series');
+      const tab = ['live', 'movies', 'series', 'search'].includes(t) && !(a.kind === 'm3u' && (t === 'movies' || t === 'series')) ? t : 'live';
+      return tvBrowse(a, tab) + (tab === 'search' ? '' : histPanel(tab));
+    }
     const back = `<button class="chip" data-act="tvHome" style="align-self:flex-start">‹ Back</button>`;
     if (t === 'free') return back + views.iptvFree();
     if (!a || t === 'login') return tvLogin();
@@ -1621,6 +1719,19 @@ const views = {
     const sw = (id, on) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><i></i></label>`;
     const sel = (id, vals, cur) => `<select id="${id}">${vals.map(v => `<option ${String(v) === String(cur) ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
     const txt = (id, val, ph, type = 'text') => `<div class="field"><input id="${id}" type="${type}" value="${esc(val)}" placeholder="${esc(ph)}" autocomplete="off"></div>`;
+    if (ED) return `<details class="panel more" data-set="Playlists" ${S.setOpen === 'Playlists' ? 'open' : ''}><summary><span class="label">Playlists</span></summary>
+        ${edAccounts()}</details>
+      <details class="panel more" data-set="Playback" ${S.setOpen === 'Playback' ? 'open' : ''}><summary><span class="label">Playback</span></summary>
+        <div class="set"><span>Resume where I stopped</span>${sw('s-resume', st.resume)}</div>
+        <div class="set"><span>Play the next episode</span>${sw('s-autoplay', st.autoplay)}</div>
+        <div class="set"><span>Skip</span>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
+        <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></details>
+      <details class="panel more" data-set="Look" ${S.setOpen === 'Look' ? 'open' : ''}><summary><span class="label">Look</span></summary>
+        <div class="set"><span>Theme</span>${sel('s-theme', ['Light', 'Dark'], document.documentElement.dataset.theme === 'dark' ? 'Dark' : 'Light')}</div></details>
+      <details class="panel more" data-set="TV" ${S.setOpen === 'TV' ? 'open' : ''}><summary><span class="label">TV</span></summary>
+        <div class="set"><span>Free TV country<span class="sub">Two letters, like EG</span></span>${txt('s-region', st.region, REGION)}</div>
+        <div class="set"><span>Reconnect to my TV<span class="sub">When it appears on the Wi-Fi</span></span>${sw('s-autoConnect', st.autoConnect)}</div></details>
+      <div class="label" style="text-align:center">${APP_NAME}${N.on ? ' · App' : ''}</div>`;
     return `<details class="panel more" data-set="Look" ${S.setOpen === 'Look' ? 'open' : ''}><summary><span class="label">Look</span></summary>
         <div class="set"><span>Theme</span>${sel('s-theme', ['Light', 'Dark'], document.documentElement.dataset.theme === 'dark' ? 'Dark' : 'Light')}</div>
         <div class="set"><span>Home emblem</span>${sel('s-emblem', ['Logo', 'Ring'], st.emblem === 'ring' ? 'Ring' : 'Logo')}</div></details>
@@ -1684,7 +1795,7 @@ function ytNotice() {
 function ytPanel() {
   return `<section class="panel"><details class="more" ${S.device && S.device !== 'local' ? 'open' : ''}><summary><span class="label">YouTube on the TV</span></summary><div class="body">
     <div class="muted" style="font-size:14px">YouTube only casts from its own app.</div>
-    <div class="pills" style="justify-content:flex-start"><a class="btn sm acc" href="${esc(ytLink())}" target="_blank" rel="noopener">Open in YouTube</a><button class="btn sm" data-act="ytCopy">${icon('copy')}Link</button><button class="btn sm" data-act="ytMirror">${icon('mirror')}Mirror</button></div>
+    <div class="pills" style="justify-content:flex-start"><a class="btn sm acc" href="${esc(ytLink())}" target="_blank" rel="noopener">Open in YouTube</a><button class="btn sm" data-act="ytCopy">${icon('copy')}Link</button>${ED ? '' : `<button class="btn sm" data-act="ytMirror">${icon('mirror')}Mirror</button>`}</div>
     <div class="muted" style="font-size:13px">Or on the TV: YouTube → Settings → Link with TV code.</div></div></details></section>`;
 }
 
@@ -1708,11 +1819,20 @@ function renderMirrorScreen() {
   mvid.play().catch(() => {});
 }
 
+/* True while a finger (or key) moves the seek bar; it used to stop following the video once it had focus */
+let seekDrag = false;
+['pointerup', 'pointercancel', 'touchend'].forEach(ev => addEventListener(ev, () => { if (seekDrag) setTimeout(() => { seekDrag = false; }, 0); }, { passive: true }));
 function tick(full) {
   const pct = !P.live && P.dur ? Math.min(100, P.pos / P.dur * 100) : (P.item ? 100 : 0);
   const sk = $('#seek');
-  if (sk && document.activeElement !== sk) { sk.value = Math.round(P.pos); sk.style.setProperty('--p', pct + '%'); }
-  const tp = $('#tPos'); if (tp) tp.textContent = fmt(P.pos);
+  if (sk) {
+    /* The range is drawn before the length is known (0 → max 1) and the length can change, so keep it current */
+    const max = String(Math.max(1, Math.round(P.dur))), off = !P.item || P.live;
+    if (sk.max !== max) sk.max = max;
+    if (sk.disabled !== off) sk.disabled = off;
+    if (!seekDrag) { sk.value = Math.round(P.pos); sk.style.setProperty('--p', pct + '%'); }
+  }
+  const tp = $('#tPos'); if (tp && !seekDrag) tp.textContent = fmt(P.pos);
   const td = $('#tDur'); if (td) td.textContent = P.live ? 'LIVE' : '-' + fmt(Math.max(0, P.dur - P.pos));
   const ot = $('#osdTime'); if (ot) ot.textContent = P.live ? 'LIVE' : fmt(P.pos) + ' / ' + fmt(P.dur);
   const ep = $('#eProg'); if (ep) ep.setAttribute('stroke-dasharray', `${P.item ? pct : 0} 100`);
@@ -1786,8 +1906,8 @@ function drawDevices() {
     ${list.map(d => row(d.id, d.icon, d.name, [d.kind, d.detail, d.demo && 'demo'].filter(Boolean).join(' · '), d.id === S.device)).join('')}
     ${row('local', 'phone', 'This device', 'Play here', S.device === 'local')}
     ${N.on && !N.scanning && !found ? `<div class="note sheet-note">The phone and the screen must be on the same Wi-Fi, and the screen must support Google Cast or DLNA. For a car screen, join the car’s Wi-Fi or connect the car to your phone’s hotspot.</div>` : ''}
-    ${!N.on && isAndroid ? `<div class="note sheet-note">Get the StreamBeam app to find TVs and car screens on your Wi-Fi.<div class="acts"><a class="btn sm acc" href="https://github.com/elrity/streambeam/releases/latest" target="_blank" rel="noopener">Get the app</a></div></div>` : ''}
-    <footer>${N.on ? `<button class="btn sm" data-act="rescan">${icon('refresh')}Search again</button>` : ''}<button class="btn sm" data-act="mirrorFromSheet">${icon('mirror')}Mirror</button>${S.device ? '<button class="btn sm flat" data-act="disconnect">Disconnect</button>' : ''}</footer></div>`;
+    ${!N.on && isAndroid ? `<div class="note sheet-note">Get the ${APP_NAME} app to find TVs and car screens on your Wi-Fi.<div class="acts"><a class="btn sm acc" href="https://github.com/elrity/streambeam/releases/latest" target="_blank" rel="noopener">Get the app</a></div></div>` : ''}
+    <footer>${N.on ? `<button class="btn sm" data-act="rescan">${icon('refresh')}Search again</button>` : ''}${ED ? '' : `<button class="btn sm" data-act="mirrorFromSheet">${icon('mirror')}Mirror</button>`}${S.device ? '<button class="btn sm flat" data-act="disconnect">Disconnect</button>' : ''}</footer></div>`;
 }
 function pickDevice(id) {
   const d = deviceList().find(x => x.id === id);
@@ -1848,11 +1968,12 @@ function findItem(row) {
 const RATES = [1, 1.25, 1.5, 2, .5, .75];
 
 document.addEventListener('click', async e => {
-  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-xi],[data-ask],[data-copyask],[data-resume]');
+  const b = e.target.closest('[data-act],[data-go],[data-site],[data-ch],[data-group],[data-src],[data-xi],[data-ask],[data-copyask],[data-resume],[data-tvtab]');
   if (!b || scrim.contains(b)) return;
   if (b.dataset.go) return go(b.dataset.go);
+  if (b.dataset.tvtab) return edOpen(b.dataset.tvtab);
   if (b.dataset.ask) return ask(b.dataset.ask);
-  if (b.dataset.resume) { const h = S.history.find(x => x.url === b.dataset.resume); if (h) playItem({ ...h, id: uid() }, { from: Math.max(0, h.pos - 5) }); return; }
+  if (b.dataset.resume) { const h = S.history.find(x => x.url === b.dataset.resume); if (h) playItem({ ...h, id: uid() }, { from: h.live ? 0 : Math.max(0, h.pos - 5) }); return; }
   if (b.dataset.copyask) {
     const t = TILES.find(x => x.id === b.dataset.copyask);
     if (N.on) { e.preventDefault(); openAssistant(t.prompt()); return; }
@@ -1860,9 +1981,9 @@ document.addEventListener('click', async e => {
     return;
   }
   if (b.dataset.site) { const s = SITES.find(x => x.id === b.dataset.site); return browse(s.url); }
-  if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(c, { from: 0 }); }
+  if (b.dataset.ch) { const c = views._ch.find(x => x.id === b.dataset.ch); return c && playItem(ED ? { ...c, sec: 'free' } : c, { from: 0 }); }
   if (b.dataset.group) { S.group = b.dataset.group; return render(); }
-  if (b.dataset.xi) { const it = XT.shown[+b.dataset.xi]; if (!it) return; if (it.series) return tvGo({ tab: 'series1', series: it.series }); return playItem({ ...it, id: uid() }, { from: 0 }); }
+  if (b.dataset.xi) { const it = XT.shown[+b.dataset.xi]; if (!it) return; if (it.series) return tvGo({ tab: 'series1', series: it.series }); return playItem(ED ? { ...it, id: uid(), tv: it.tv || S.acc, sec: secOf({ ...it, tv: S.acc }) } : { ...it, id: uid() }, { from: 0 }); }
   if (b.dataset.src) { S.iptvSrc = b.dataset.src; S.group = 'All'; S.chSearch = ''; TV.err = ''; render(); $('.scroll') && ($('.scroll').scrollTop = 0); return; }
   const act = b.dataset.act;
   const row = b.closest('.row'); const ctx = row ? findItem(row) : {};
@@ -1956,6 +2077,8 @@ document.addEventListener('click', async e => {
       S.tv = { tab: 'home', accounts: S.accounts.length > 0 }; save(); toast('Playlist removed'); render(); break;
     }
     case 'tvSeason': tvSet({ ...S.tv, season: b.dataset.season }); break;
+    case 'edClearHist': { const sec = b.dataset.sec; S.history = S.history.filter(h => !(secOf(h) === sec && (sec === 'free' || h.tv === S.acc))); save(); render(); break; }
+    case 'edAddPlaylist': XT.err = ''; S.setOpen = 'Playlists'; go('settings'); break;
     case 'tvClearCont': S.history = S.history.filter(h => !h.tv || h.live); save(); render(); break;
     case 'tvRetry': { const a = acct(); if (a) Object.keys(XT.failed).filter(k => k.startsWith(a.id + ':')).forEach(k => delete XT.failed[k]); render(); break; }
     case 'iptvRetry': TV.err = ''; loadIptv(S.iptvSrc); break;
@@ -1988,7 +2111,7 @@ document.addEventListener('submit', e => {
 });
 document.addEventListener('input', e => {
   const t = e.target;
-  if (t.id === 'seek') { t.style.setProperty('--p', (t.value / t.max * 100) + '%'); $('#tPos').textContent = fmt(+t.value); }
+  if (t.id === 'seek') { seekDrag = true; t.style.setProperty('--p', (t.value / t.max * 100) + '%'); $('#tPos').textContent = fmt(+t.value); }
   if (t.id === 'vol') {
     P.vol = t.value / 100; P.muted = P.vol === 0; video.volume = P.vol; video.muted = P.muted;
     if (ytOn()) { Y.player.setVolume(+t.value); P.muted ? Y.player.mute() : Y.player.unMute(); }
@@ -1999,7 +2122,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target;
-  if (t.id === 'seek') seek(+t.value);
+  if (t.id === 'seek') { seekDrag = false; seek(+t.value); t.blur(); }
   if (t.id?.startsWith('m-')) {
     const k = t.id.slice(2);
     M[k] = t.type === 'checkbox' ? t.checked : (k === 'fps' ? +t.value : t.value);
@@ -2009,6 +2132,7 @@ document.addEventListener('change', async e => {
     const k = t.id.slice(2);
     S.settings[k] = t.type === 'checkbox' ? t.checked : k === 'skip' ? +t.value : k === 'units' ? { '°C': 'C', '°F': 'F' }[t.value] || '' : k === 'region' ? t.value.trim().toUpperCase() : ['vlcBridge', 'geminiKey', 'geminiModel'].includes(k) ? t.value.trim() : t.value;
     if (k === 'vlcBridge') V.ok = false;
+    if (k === 'region') delete TV.text.country;
     if (k === 'theme') { setTheme(t.value === 'Dark' ? 'dark' : 'light'); return; }
     if (k === 'emblem') S.settings.emblem = t.value.toLowerCase();
     if (k === 'demo' && !t.checked && S.device.startsWith('demo-')) S.device = '';
@@ -2064,6 +2188,7 @@ function idleWake() {
 $('#idle').addEventListener('click', e => { e.stopPropagation(); idleWake(); });
 addEventListener('pointerdown', e => { if (IDLE.on && IDLE.kind === 'mirror') idleWake(); }, { capture: true });
 setInterval(() => {
+  if (ED) return; // Rity IPTV has no idle screen
   const live = N.mirror.state === 'live', busy = live || castingNow();
   if (N.on && live !== IDLE.awake) { IDLE.awake = live; ncall('screen', { dim: IDLE.on, awake: live }).catch(() => {}); }
   if (IDLE.on) { if (!busy) idleWake(); else if (IDLE.kind === 'cast' && new Date().getSeconds() < 5) idleDraw(); return; }
@@ -2079,14 +2204,15 @@ if (S.device.startsWith('n:') && !N.on) { S.device = ''; S.deviceName = ''; }
   if (goTo === 'history' || goTo === 'bookmarks') { S.libTab = goTo; goTo = 'library'; }
   try { history.replaceState({ sb: 'home' }, '', location.pathname); } catch {}
   render();
-  if (TILES.some(t => t.id === goTo)) { go('today'); geminiStatus().then(() => ask(goTo)); }
+  if (ED) { if (ED_TABS.includes(goTo)) edOpen(goTo); else if (goTo === 'iptv') edOpen('live'); else if (ED_VIEWS.includes(goTo)) go(goTo); }
+  else if (TILES.some(t => t.id === goTo)) { go('today'); geminiStatus().then(() => ask(goTo)); }
   else { if (goTo in TITLES) go(goTo); geminiStatus(); }
 }
 if (S.device === 'vlc') vlcConnect(true);
 /* The car joins the phone's hotspot. Android lets only its Settings turn the hotspot on, so when it's off
    the app opens that page once per start (Settings → Screens → Open hotspot at start). */
 let hotspotAsked = true; try { hotspotAsked = !!sessionStorage.getItem('sb.hotspotAsked'); sessionStorage.setItem('sb.hotspotAsked', '1'); } catch {}
-if (N.on && S.settings.hotspot && !hotspotAsked) {
+if (N.on && !ED && S.settings.hotspot && !hotspotAsked) {
   ncall('hotspot', { openIfOff: true }).then(r => { if (r?.opened) toast('Turn on the hotspot, then come back'); }).catch(() => {});
 }
 if (N.on && S.device.startsWith('n:')) ncall('scan', { quiet: true }).catch(() => {});

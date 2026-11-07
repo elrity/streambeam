@@ -2,6 +2,7 @@
 twa.properties
 app/src/main/res/values/twa.xml
 app/src/main/res/xml/
+app/src/iptv/res/xml/
 build/
 app/build/
 .gradle/

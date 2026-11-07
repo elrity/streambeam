@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rity IPTV edition: overrides the name written by configure.mjs (src/main/res/values/twa.xml). -->
+<resources>
+    <string name="app_name">Rity IPTV</string>
+</resources>

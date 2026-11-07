@@ -25,6 +25,24 @@ play on the phone.
 The web page talks to Android through a message channel that only
 `https://elrity.github.io` can open (`WebViewCompat.addWebMessageListener`).
 
+## Two editions
+
+The app has two product flavors, built from the same code and the same web app:
+
+| Flavor | App | Application id |
+| --- | --- | --- |
+| `streambeam` | StreamBeam | `app.streambeam.caster` |
+| `iptv` | Rity IPTV (IPTV only) | `app.rity.iptv` |
+
+`src/iptv/` holds what differs for Rity IPTV: its name, icon and logo, its
+home-screen shortcuts (written by `configure.mjs`) and a manifest that leaves
+out the mirroring service and its permissions. The app adds `SBEdition/iptv`
+to the web page's user agent, and the web app then shows only IPTV.
+`node configure.mjs <address> [streambeam id] [version] [iptv id]` sets the ids.
+Build one with `./gradlew assembleStreambeamRelease` or
+`./gradlew assembleIptvRelease`; in Android Studio pick the variant in
+Build → Select Build Variant.
+
 ## Build it in Android Studio (Mac, Windows or Linux)
 
 1. Install [Android Studio](https://developer.android.com/studio) and
@@ -46,7 +64,7 @@ The web page talks to Android through a message channel that only
 5. **Make the APK to keep and share**: Build → **Generate Signed App Bundle or
    APK** → *APK* → *Create new…* keystore (save it somewhere safe, e.g.
    `~/streambeam.jks`, alias `streambeam`) → *release* → Create. The APK is
-   in `android/app/release/app-release.apk`; send it to the phone (Google
+   in `android/app/<flavor>/release/`; send it to the phone (Google
    Drive, email, USB) and open it there.
 6. **Hide the browser bar**: get the key's fingerprint and set it on the
    server as `ANDROID_CERT_SHA256` (Render → Environment):
@@ -114,14 +132,14 @@ Needs JDK 17+ and the Android SDK (`ANDROID_HOME`); the Gradle wrapper fetches G
 ```sh
 cd android
 node configure.mjs https://streambeam-xxxx.onrender.com
-./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
+./gradlew assembleRelease   # both: app/build/outputs/apk/{streambeam,iptv}/release/
 ```
 
 ## Google Play
 
 Play needs an Android App Bundle: run `./gradlew bundleRelease` (or choose
 *Android App Bundle* in Android Studio's Generate Signed wizard) with your own
-key, then upload `app/build/outputs/bundle/release/app-release.aab` in Play
+key, then upload `app/build/outputs/bundle/<flavor>Release/app-<flavor>-release.aab` in Play
 Console. Play signs the app with its own key, so add Play's "App signing key"
 SHA-256 to `ANDROID_CERT_SHA256` too (comma-separated).
 

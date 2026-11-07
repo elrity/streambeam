@@ -45,7 +45,7 @@ public class ActivationActivity extends Activity {
         logo.setImageResource(R.drawable.logo);
         col.addView(logo, new LinearLayout.LayoutParams(dp(150), dp(150)));
 
-        col.addView(text("Activate StreamBeam", 22, true, 0xFF141416), wrap(dp(20)));
+        col.addView(text("Activate " + getString(R.string.app_name), 22, true, 0xFF141416), wrap(dp(20)));
         col.addView(text("Send this phone’s code to Rity to get your activation link. It works on this phone only.", 15, false, 0xFF5A5B60), wrap(dp(8)));
 
         TextView code = text(device, 30, true, 0xFF141416);
@@ -58,7 +58,7 @@ public class ActivationActivity extends Activity {
         row.setGravity(Gravity.CENTER);
         Button send = button("Send code", true);
         send.setOnClickListener(v -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
-                .putExtra(Intent.EXTRA_TEXT, "Please activate StreamBeam for my phone. Device code: " + device), "Send the code")));
+                .putExtra(Intent.EXTRA_TEXT, "Please activate " + getString(R.string.app_name) + " for my phone. Device code: " + device), "Send the code")));
         Button copy = button("Copy", false);
         copy.setOnClickListener(v -> {
             ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Device code", device));
@@ -118,7 +118,7 @@ public class ActivationActivity extends Activity {
     }
 
     private void done() {
-        Toast.makeText(this, "StreamBeam is activated on this phone.", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, getString(R.string.app_name) + " is activated on this phone.", Toast.LENGTH_LONG).show();
         startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
         finish();
     }

@@ -13,7 +13,7 @@
 //      ALLOW_ORIGIN (another origin allowed to call /vlc, e.g. where you host index.html),
 //      TRUST_PROXY (set behind a hosting proxy such as Render, so limits use the visitor's address),
 //      ANDROID_CERT_SHA256 (the Android app's signing fingerprint(s), comma-separated) and ANDROID_PACKAGE
-//      (app.streambeam.caster): serves /.well-known/assetlinks.json so the APK opens without a browser bar.
+//      (comma-separated; default app.streambeam.caster and app.rity.iptv, the IPTV edition): serves /.well-known/assetlinks.json so the APK opens without a browser bar.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
@@ -35,7 +35,8 @@ const VLC_AUTH = 'Basic ' + Buffer.from(':' + (env.VLC_PASSWORD || '')).toString
 const ALLOW_ORIGIN = env.ALLOW_ORIGIN || '';
 const TRUST_PROXY = /^(1|true|yes)$/i.test(env.TRUST_PROXY || '');
 const ANDROID_CERTS = (env.ANDROID_CERT_SHA256 || '').split(',').map(s => s.trim().toUpperCase()).filter(s => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(s));
-const ASSET_LINKS = ANDROID_CERTS.length ? JSON.stringify([{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: env.ANDROID_PACKAGE || 'app.streambeam.caster', sha256_cert_fingerprints: ANDROID_CERTS } }]) : '';
+const ANDROID_PACKAGES = (env.ANDROID_PACKAGE || 'app.streambeam.caster,app.rity.iptv').split(',').map(s => s.trim()).filter(Boolean);
+const ASSET_LINKS = ANDROID_CERTS.length ? JSON.stringify(ANDROID_PACKAGES.map(p => ({ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: p, sha256_cert_fingerprints: ANDROID_CERTS } }))) : '';
 
 const FILES = {
   '/': ['index.html', 'text/html; charset=utf-8', 'no-cache'],

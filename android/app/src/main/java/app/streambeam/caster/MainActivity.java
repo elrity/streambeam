@@ -63,7 +63,9 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        s.setUserAgentString(s.getUserAgentString() + " StreamBeamApp/" + BuildConfig.VERSION_NAME);
+        // The web app shows the IPTV-only edition when it sees SBEdition/iptv.
+        s.setUserAgentString(s.getUserAgentString() + " StreamBeamApp/" + BuildConfig.VERSION_NAME
+                + ("iptv".equals(BuildConfig.EDITION) ? " SBEdition/iptv" : ""));
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
 

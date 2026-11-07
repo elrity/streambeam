@@ -39,6 +39,24 @@ The app's features load from the web, so fixes arrive without reinstalling.
 - **Weather and local news:** type your city on the Today screen or tap
   *Use my location*.
 
+## Rity IPTV (IPTV-only edition)
+
+A second Android app built from the same code: **Rity IPTV** (`app.rity.iptv`,
+its own name and icon). It installs next to StreamBeam. Each release has both
+APKs: `StreamBeam-….apk` and `RityIPTV-….apk`.
+
+- Opens straight on the IPTV keypad: Live TV, Movies, Series, Free TV, Search
+  and Settings. The other sections, mirroring, the idle screen and the hotspot
+  prompt are left out.
+- Playlists (Xtream code or M3U link) are added and switched in
+  Settings → Playlists.
+- Each section has a History list at the bottom, newest first, with how far
+  you got; tap one to carry on where you stopped.
+
+The web app knows it's this edition from the app (it adds `SBEdition/iptv` to
+the browser's user agent). To try it in a browser, open the app link with
+`?edition=iptv` (and `?edition=full` to go back).
+
 ## What's in this repository
 
 | Folder | What it is |

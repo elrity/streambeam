@@ -18,7 +18,6 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId twa.getProperty('applicationId')
         minSdk 23
         targetSdk 35
         versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
@@ -26,6 +25,23 @@ android {
         // Builds made with REQUIRE_ACTIVATION=true open only on phones activated by the owner (Activation.java).
         buildConfigField 'boolean', 'REQUIRE_ACTIVATION', (System.getenv('REQUIRE_ACTIVATION') == 'true').toString()
         manifestPlaceholders = [hostName: twa.getProperty('host'), pathPrefix: twa.getProperty('path', '/')]
+    }
+
+    // Two editions from one code base and one web app. The web app reads the edition from the user agent.
+    //   streambeam: the full StreamBeam app (unchanged).
+    //   iptv:       "Rity IPTV", IPTV only, with its own application id, name and icon (src/iptv).
+    flavorDimensions 'edition'
+    productFlavors {
+        streambeam {
+            dimension 'edition'
+            applicationId twa.getProperty('applicationId')
+            buildConfigField 'String', 'EDITION', '"streambeam"'
+        }
+        iptv {
+            dimension 'edition'
+            applicationId twa.getProperty('iptvApplicationId', 'app.rity.iptv')
+            buildConfigField 'String', 'EDITION', '"iptv"'
+        }
     }
 
     signingConfigs {
