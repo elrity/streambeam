@@ -1,0 +1,16 @@
+{
+  "name": "RoomFit – furniture in your room",
+  "short_name": "RoomFit",
+  "description": "Place real-size 3D furniture in your room with your phone's camera.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f2eee6",
+  "theme_color": "#1d2421",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
