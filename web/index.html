@@ -518,7 +518,44 @@ const save = () => { ['queue', 'history', 'bookmarks', 'settings', 'device', 'de
 
 /* ---------- Playback engine ---------- */
 const video = $('#video');
-let hls = null;
+let hls = null, tsp = null;
+/* Live IPTV as a plain MPEG-TS stream (providers that turn off .m3u8), played with mpegts.js, loaded when needed */
+let mpegtsLoad = null;
+function mpegtsLib() {
+  if (window.mpegts) return Promise.resolve(window.mpegts);
+  return mpegtsLoad || (mpegtsLoad = new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = 'https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js';
+    sc.onload = () => window.mpegts ? res(window.mpegts) : rej(new Error('missing'));
+    sc.onerror = () => { mpegtsLoad = null; rej(new Error('blocked')); };
+    document.head.appendChild(sc);
+  }));
+}
+function dropPlayers() {
+  if (hls) { hls.destroy(); hls = null; }
+  if (tsp) { try { tsp.destroy(); } catch {} tsp = null; }
+}
+/* .m3u8 first (unless the provider only allows .ts, or Settings says TS); a live channel that fails as .m3u8 retries as .ts */
+const wantTs = item => !!item.tsUrl && (S.settings.liveFormat === 'TS' || (S.settings.liveFormat !== 'HLS' && !!item.noHls));
+async function startTs(item) {
+  dropPlayers();
+  item._ts = true; P.vidErr = false;
+  video.removeAttribute('src'); video.load();
+  let url = item.tsUrl;
+  if (N.on) { try { url = (await ncall('proxy', { url })).url; } catch {} }
+  let lib;
+  try { lib = await mpegtsLib(); } catch { if (P.item === item) { P.vidErr = true; render(); } return; }
+  if (P.item !== item) return;
+  if (!lib.getFeatureList().mseLivePlayback) { P.vidErr = true; render(); return; }
+  tsp = lib.createPlayer({ type: 'mpegts', isLive: true, url }, { enableWorker: false, liveBufferLatencyChasing: true, autoCleanupSourceBuffer: true });
+  tsp.on(lib.Events.ERROR, () => { if (P.item === item) { P.vidErr = true; P.real = false; render(); } });
+  tsp.attachMediaElement(video); tsp.load();
+  video.volume = P.vol; video.muted = P.muted;
+}
+function liveFallback(item) {
+  if (P.item !== item) return;
+  if (item.tsUrl && !item._ts) { startTs(item); return; }
+  P.vidErr = true; P.real = false; render();
+}
 const P = { item: null, playing: false, pos: 0, dur: 0, live: false, vol: .8, muted: false, rate: 1, real: false, subs: null, subName: '', yt: null, ytState: '' };
 
 /* YouTube runs in the official IFrame Player, driven by the same remote controls */
@@ -596,7 +633,7 @@ async function ytTitle(item) {
 
 function load(item, startAt = 0) {
   P.item = item; P.pos = startAt; P.dur = item.duration || 0; P.live = !!item.live; P.real = false; P.subs = null; P.subName = '';
-  if (hls) { hls.destroy(); hls = null; }
+  dropPlayers(); delete item._ts;
   video.removeAttribute('src'); video.load();
   P.yt = ytParse(item.url); P.ytState = ''; P.vidErr = false;
   P.ext = S.device === 'vlc' && canVlc(item.url) ? 'vlc' : S.device.startsWith('n:') && castable(item.url) ? 'native' : '';
@@ -607,8 +644,16 @@ function load(item, startAt = 0) {
   const f = fmtOf(item.url);
   const begin = src => {
     try {
-      if (f === 'HLS' && !video.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
-        hls = new Hls(); hls.loadSource(src); hls.attachMedia(video);
+      /* hls.js whenever the browser can run it: Android's WebView says it "maybe" plays HLS itself, but often can't */
+      if (f === 'HLS' && window.Hls && Hls.isSupported()) {
+        hls = new Hls();
+        let mediaRetry = 0;
+        hls.on(Hls.Events.ERROR, (ev, d) => {
+          if (!d.fatal || P.item !== item) return;
+          if (d.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRetry++ < 1) { hls.recoverMediaError(); return; }
+          liveFallback(item);
+        });
+        hls.loadSource(src); hls.attachMedia(video);
       } else if (f !== 'DASH') {
         video.src = src;
       }
@@ -616,6 +661,7 @@ function load(item, startAt = 0) {
     video.volume = P.vol; video.muted = P.muted; video.playbackRate = P.rate;
   };
   /* In the app, IPTV streams (HLS, or plain http) play through the phone's pass-through: most IPTV servers don't allow web pages */
+  if (wantTs(item)) { startTs(item); return; }
   if (N.on && /^https?:/i.test(item.url) && !/^http:\/\/127\.0\.0\.1/.test(item.url) && (f === 'HLS' || /^http:/i.test(item.url))) {
     ncall('proxy', { url: item.url }).then(r => { if (P.item === item) begin(r.url); }).catch(() => { if (P.item === item) begin(item.url); });
   } else begin(item.url);
@@ -636,7 +682,9 @@ video.addEventListener('loadedmetadata', () => {
   renderScreen();
 });
 video.addEventListener('durationchange', () => { if (P.real) { videoDuration(); tick(); } });
-video.addEventListener('error', () => { P.real = false; if (P.item && video.getAttribute('src')) P.vidErr = true; if (S.view === 'player') render(); else renderScreen(); });
+video.addEventListener('error', () => {
+  if (P.item && P.item.live && P.item.tsUrl && !P.item._ts && !tsp) { liveFallback(P.item); return; }
+  P.real = false; if (P.item && video.getAttribute('src')) P.vidErr = true; if (S.view === 'player') render(); else renderScreen(); });
 
 /* ---------- VLC ----------
    VLC acts as a receiver through its web interface (Lua HTTP). Browsers can't send VLC's password,
@@ -760,7 +808,7 @@ function seek(t) {
 function stop() {
   logHistory();
   P.item = null; P.playing = false; P.pos = 0;
-  if (hls) { hls.destroy(); hls = null; }
+  dropPlayers();
   video.pause(); video.removeAttribute('src'); video.load();
   if (Y.player && Y.ready) { try { Y.player.stopVideo(); } catch {} }
   P.yt = null; Y.key = '';
@@ -1134,7 +1182,8 @@ const asList = d => Array.isArray(d) ? d : d && typeof d === 'object' ? Object.v
 function xItem(a, kind, x) {
   const b = xbase(a), u = encodeURIComponent(a.user), p = encodeURIComponent(a.pass);
   if (kind === 'live') return { id: 'x' + x.stream_id, title: x.name || 'Channel', logo: x.stream_icon, live: true, res: 'Live', duration: 0,
-    url: `${b}/live/${u}/${p}/${x.stream_id}.m3u8`, tsUrl: `${b}/live/${u}/${p}/${x.stream_id}.ts` };
+    url: `${b}/live/${u}/${p}/${x.stream_id}.m3u8`, tsUrl: `${b}/live/${u}/${p}/${x.stream_id}.ts`,
+    noHls: !!(a.formats && a.formats.length && !a.formats.includes('m3u8')) };
   if (kind === 'movie') return { id: 'm' + x.stream_id, title: x.name || 'Movie', logo: x.stream_icon, res: x.rating ? '★ ' + x.rating : '', duration: 0, tv: a.id,
     url: `${b}/movie/${u}/${p}/${x.stream_id}.${x.container_extension || 'mp4'}` };
   return { id: 'e' + x.id, title: x.title || 'Episode', logo: x.info?.movie_image, res: '', duration: +x.info?.duration_secs || 0, tv: a.id,
@@ -1150,6 +1199,7 @@ async function addAccount(form) {
     const j = await xjson(a);
     if (!j || !j.user_info || +j.user_info.auth === 0) throw new Error('Wrong username or password.');
     a.exp = +j.user_info.exp_date || 0; a.status = j.user_info.status || '';
+    a.formats = Array.isArray(j.user_info.allowed_output_formats) ? j.user_info.allowed_output_formats : [];
     a.name = a.name || new URL(a.server).hostname;
   } else {
     a.url = fix(v('url'));
@@ -1725,6 +1775,7 @@ const views = {
       <details class="panel more" data-set="Playback" ${S.setOpen === 'Playback' ? 'open' : ''}><summary><span class="label">Playback</span></summary>
         <div class="set"><span>Resume where I stopped</span>${sw('s-resume', st.resume)}</div>
         <div class="set"><span>Play the next episode</span>${sw('s-autoplay', st.autoplay)}</div>
+        <div class="set"><span>Live TV format<span class="sub">Auto tries HLS, then TS</span></span>${sel('s-liveFormat', ['Auto', 'HLS', 'TS'], st.liveFormat || 'Auto')}</div>
         <div class="set"><span>Skip</span>${sel('s-skip', [5, 10, 15, 30, 60], st.skip)}</div>
         <div class="set"><span>Subtitle size</span>${sel('s-subSize', ['Small', 'Medium', 'Large'], st.subSize)}</div></details>
       <details class="panel more" data-set="Look" ${S.setOpen === 'Look' ? 'open' : ''}><summary><span class="label">Look</span></summary>
@@ -2134,6 +2185,7 @@ document.addEventListener('change', async e => {
     S.settings[k] = t.type === 'checkbox' ? t.checked : k === 'skip' ? +t.value : k === 'units' ? { '°C': 'C', '°F': 'F' }[t.value] || '' : k === 'region' ? t.value.trim().toUpperCase() : ['vlcBridge', 'geminiKey', 'geminiModel'].includes(k) ? t.value.trim() : t.value;
     if (k === 'vlcBridge') V.ok = false;
     if (k === 'region') delete TV.text.country;
+    if (k === 'liveFormat') S.settings.liveFormat = t.value === 'Auto' ? '' : t.value;
     if (k === 'theme') { setTheme(t.value === 'Dark' ? 'dark' : 'light'); return; }
     if (k === 'emblem') S.settings.emblem = t.value.toLowerCase();
     if (k === 'demo' && !t.checked && S.device.startsWith('demo-')) S.device = '';
