@@ -10,6 +10,10 @@ on:
       app_url:
         description: "App address (leave empty for https://elrity.github.io/streambeam/)"
         required: false
+      activation_test:
+        description: "Activation test: build StreamBeam that opens only on activated phones, as a test release (the normal download stays as it is)"
+        type: boolean
+        default: false
   push:
     paths:
       - "android/**"
@@ -60,8 +64,10 @@ jobs:
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
-          # Set the REQUIRE_ACTIVATION repository variable to true to make the APK open only on activated phones.
-          REQUIRE_ACTIVATION: ${{ vars.REQUIRE_ACTIVATION }}
+          # Repository variables REQUIRE_ACTIVATION (StreamBeam) and REQUIRE_ACTIVATION_IPTV (Rity IPTV) set to true
+          # make that APK open only on activated phones. The activation_test run input locks StreamBeam for one run.
+          REQUIRE_ACTIVATION: ${{ inputs.activation_test && 'true' || vars.REQUIRE_ACTIVATION }}
+          REQUIRE_ACTIVATION_IPTV: ${{ vars.REQUIRE_ACTIVATION_IPTV }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -98,8 +104,25 @@ jobs:
           name: StreamBeam-apk-${{ env.APP_HOST }}
           path: out/
 
+      - name: Publish the activation test release
+        if: env.CHECK_BUILD != '1' && inputs.activation_test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LOCKED="out/StreamBeam-1.${{ github.run_number }}-activation-test.apk"
+          mv "$APK" "$LOCKED"
+          gh release create "android-1.${{ github.run_number }}-activation-test" "$LOCKED" \
+            --target "${{ github.sha }}" --prerelease \
+            --title "StreamBeam 1.${{ github.run_number }}: activation test" \
+            --notes "Test build of StreamBeam that opens only on activated phones (one install per phone). The normal download is unchanged.
+
+          1. Install the APK. It shows a device code (like K7QX2-MRH4D).
+          2. Actions → Activate a phone → Run workflow → paste that code. The run's summary has an activation link.
+          3. Open the link on that phone (or paste it in the app): StreamBeam opens.
+          4. Install the same APK on another phone: it shows a different code, and the first link doesn't open it."
+
       - name: Publish a release
-        if: env.CHECK_BUILD != '1'
+        if: env.CHECK_BUILD != '1' && !inputs.activation_test
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -22,8 +22,6 @@ android {
         targetSdk 35
         versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
         versionName twa.getProperty('versionName', '1.0')
-        // Builds made with REQUIRE_ACTIVATION=true open only on phones activated by the owner (Activation.java).
-        buildConfigField 'boolean', 'REQUIRE_ACTIVATION', (System.getenv('REQUIRE_ACTIVATION') == 'true').toString()
         manifestPlaceholders = [hostName: twa.getProperty('host'), pathPrefix: twa.getProperty('path', '/')]
     }
 
@@ -36,11 +34,15 @@ android {
             dimension 'edition'
             applicationId twa.getProperty('applicationId')
             buildConfigField 'String', 'EDITION', '"streambeam"'
+            // Built with REQUIRE_ACTIVATION=true, it opens only on phones the owner activated (Activation.java).
+            buildConfigField 'boolean', 'REQUIRE_ACTIVATION', (System.getenv('REQUIRE_ACTIVATION') == 'true').toString()
         }
         iptv {
             dimension 'edition'
             applicationId twa.getProperty('iptvApplicationId', 'app.rity.iptv')
             buildConfigField 'String', 'EDITION', '"iptv"'
+            // Rity IPTV has its own switch: REQUIRE_ACTIVATION_IPTV=true.
+            buildConfigField 'boolean', 'REQUIRE_ACTIVATION', (System.getenv('REQUIRE_ACTIVATION_IPTV') == 'true').toString()
         }
     }
 
