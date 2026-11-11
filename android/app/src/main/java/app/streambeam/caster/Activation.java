@@ -27,7 +27,7 @@ import java.util.Locale;
 final class Activation {
     /** Public half of the owner's activation key (P-256). The private half stays with the owner. */
     private static final String PUBLIC_KEY =
-            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEL7Q8Zv+F+6ItmKzXtrtaOcPmpv0BxuQBqYu0z+O8J4TaoTvYhJx14tje7HuITIECDQQ2u2RH4Tif2CYrU9GGsA==";
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEle+9h9yv8HRnr2nGv466d+/wte4JINTfA5uigGDqAY0Xjyg923PrMg38eyYdi0LpFBbPM1gxxoQjKxpNfg731A==";
     private static final String PREFS = "activation", KEY = "code";
     private static final char[] B32 = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray(); // no 0/O or 1/I
 
