@@ -72,6 +72,10 @@ class AudioCapture {
     }
 
     /*
+     * Sound is stamped with the moment Android captured it (AudioRecord.getTimestamp, the same monotonic clock
+     * as the screen frames), not the moment it was read: captured sound arrives 50-200 ms late, and stamping it
+     * on arrival put the sound that far behind the picture in the car.
+     *
      * Audio runs on the real-time clock, without gaps. Android only delivers captured sound while an app is
      * playing; if the stream simply paused, the car would wait for sound and keep buffering picture
      * meanwhile, and that wait would stay as delay for the rest of the session. So any gap is filled with
@@ -80,8 +84,9 @@ class AudioCapture {
     private void loop() {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         final int frameBytes = 2 * CHANNELS, chunk = 1920 * frameBytes; // 40 ms per buffer at most
-        long baseUs = System.nanoTime() / 1000, samples = 0;
+        long baseUs = System.nanoTime() / 1000, samples = 0, framesRead = 0;
         int in = -1;
+        android.media.AudioTimestamp ts = new android.media.AudioTimestamp();
         while (running) {
             try {
                 if (in < 0) in = codec.dequeueInputBuffer(5_000);
@@ -92,17 +97,29 @@ class AudioCapture {
                     long nowUs = System.nanoTime() / 1000;
                     if (n > 0) {
                         n -= n % frameBytes;
+                        int frames = n / frameBytes;
+                        framesRead += frames;
                         if (!silent(buf, n)) lastSound = System.currentTimeMillis();
-                        // Keep the sample clock on the wall clock: if sound fell more than 150 ms behind, move it
+                        // When the first sample of this piece was captured: from Android's capture timestamp when it
+                        // has one, else estimated from now.
+                        long real = nowUs - frames * 1_000_000L / RATE;
+                        if (record.getTimestamp(ts, android.media.AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS && ts.nanoTime > 0) {
+                            long lastUs = ts.nanoTime / 1000 + (framesRead - ts.framePosition) * 1_000_000L / RATE;
+                            long fromStamp = lastUs - frames * 1_000_000L / RATE;
+                            if (fromStamp <= nowUs && nowUs - fromStamp < 2_000_000) real = fromStamp;
+                        }
+                        // Keep the sample clock on the capture clock: if sound fell more than 80 ms behind, move it
                         // forward (never back, so timestamps only grow).
-                        long expected = baseUs + samples * 1_000_000 / RATE, real = nowUs - (n / frameBytes) * 1_000_000L / RATE;
-                        if (real - expected > 150_000) baseUs = real - samples * 1_000_000 / RATE;
+                        long expected = baseUs + samples * 1_000_000 / RATE;
+                        if (real - expected > 80_000) baseUs = real - samples * 1_000_000 / RATE;
                         codec.queueInputBuffer(in, 0, n, baseUs + samples * 1_000_000 / RATE, 0);
                         samples += n / frameBytes;
                         in = -1;
                     } else {
-                        long behindUs = nowUs - (baseUs + samples * 1_000_000 / RATE);
-                        if (behindUs > 60_000 && room > 0) { // nothing captured for a while: send silence up to now
+                        // Nothing captured for a while: send silence, but only up to 250 ms ago, so sound that is still
+                        // on its way (captured but not delivered yet) keeps its true time instead of landing later.
+                        long behindUs = nowUs - 250_000 - (baseUs + samples * 1_000_000 / RATE);
+                        if (behindUs > 60_000 && room > 0) {
                             int fill = (int) Math.min(room / frameBytes, behindUs * RATE / 1_000_000) * frameBytes;
                             int at = buf.position();
                             for (int i = 0; i < fill; i++) buf.put(at + i, (byte) 0);

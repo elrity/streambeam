@@ -139,34 +139,59 @@ public class MirrorService extends Service {
 
     /*
      * The captured sound goes to the car inside the video, and Android also keeps playing it on the phone
-     * (speaker or Bluetooth). Muting the phone's media volume silences only the phone: playback capture
-     * records at full volume. On the rare phone where muting would also silence the capture, the watchdog
-     * notices (media playing but only silence captured) and turns the phone's sound back on.
+     * (speaker or Bluetooth), which would be heard twice and out of step. Muting the phone's media volume
+     * silences only the phone on most phones: playback capture records at full volume. On newer Android
+     * versions a mute can silence the capture too; the watchdog notices (media playing, only silence captured)
+     * and instead turns the phone down to its lowest step, which the capture isn't affected by. If even that
+     * leaves the car silent, the phone's volume goes back to how it was.
      */
     private void mutePhone() {
         try {
             sound = (AudioManager) getSystemService(AUDIO_SERVICE);
             if (sound.isStreamMute(AudioManager.STREAM_MUSIC)) return; // already muted by the user: leave it alone
             sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0);
+            muteStep = 1;
             muted = true;
             mutedAt = System.currentTimeMillis();
         } catch (RuntimeException ignored) {
         }
     }
 
+    private int savedVolume = -1; // the phone's media volume before it was turned down (lowest-step mode)
+    private int muteStep; // 1 muted, 2 turned down to the lowest step
+
     private void unmutePhone() {
         if (!muted) return;
         muted = false;
         try {
-            sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+            if (muteStep == 2 && savedVolume >= 0) sound.setStreamVolume(AudioManager.STREAM_MUSIC, savedVolume, 0);
+            else sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
         } catch (RuntimeException ignored) {
+        }
+        savedVolume = -1;
+    }
+
+    /** Muting silenced the capture too: unmute, then keep the phone at its lowest volume step instead. */
+    private void lowestStepInstead() {
+        if (!muted || muteStep != 1) return;
+        try {
+            sound.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+            savedVolume = sound.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int low = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? Math.max(1, sound.getStreamMinVolume(AudioManager.STREAM_MUSIC)) : 1;
+            sound.setStreamVolume(AudioManager.STREAM_MUSIC, Math.min(low, Math.max(1, savedVolume)), 0);
+            muteStep = 2;
+            mutedAt = System.currentTimeMillis();
+        } catch (RuntimeException e) {
+            unmutePhone();
         }
     }
 
     private void checkMute(long now) {
         AudioCapture a = audio;
-        if (!muted || a == null || now - mutedAt < 6000) return;
-        if (sound.isMusicActive() && now - Math.max(a.lastSound(), mutedAt) > 6000) main.post(this::unmutePhone);
+        if (!muted || a == null || now - mutedAt < 2500) return;
+        if (sound.isMusicActive() && now - Math.max(a.lastSound(), mutedAt) > 2500) {
+            main.post(muteStep == 1 ? this::lowestStepInstead : this::unmutePhone);
+        }
     }
 
     private void startForegroundNotice(boolean sound) {
