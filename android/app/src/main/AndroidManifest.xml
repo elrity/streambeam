@@ -9,6 +9,8 @@
     <!-- Mirror to car screen: screen capture runs in a foreground service with a notification -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- Mirror sound keeps recording what apps play while another app (Maps, YouTube) is in front -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Mirror sound: capturing what apps play (Android asks once) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -53,7 +55,7 @@
         <service
             android:name=".MirrorService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection|microphone" />
     </application>
     <!-- To open the phone's default assistant (Gemini, Google Assistant, Bixby…) from the Gemini button -->
     <queries>

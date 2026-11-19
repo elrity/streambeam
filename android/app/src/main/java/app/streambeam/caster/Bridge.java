@@ -309,7 +309,20 @@ class Bridge implements WebViewCompat.WebMessageListener {
         if (mirrorSound && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ask.add(Manifest.permission.RECORD_AUDIO); // to send the phone's sound with the picture
         }
-        if (!ask.isEmpty()) activity.requestPermissions(ask.toArray(new String[0]), 45);
+        // Ask first and open Android's screen-sharing question only after the answer: shown together, the sound
+        // permission was often left unanswered and mirroring started without sound.
+        if (!ask.isEmpty()) activity.requestPermissions(ask.toArray(new String[0]), PERMISSION_REQUEST);
+        else askScreenCapture();
+    }
+
+    static final int PERMISSION_REQUEST = 45;
+
+    /** Called by the activity once the person answered the permission questions for mirroring. */
+    void onMirrorPermissions() {
+        if (mirrorId >= 0) askScreenCapture();
+    }
+
+    private void askScreenCapture() {
         MediaProjectionManager mpm = (MediaProjectionManager) activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE);
         activity.startActivityForResult(mpm.createScreenCaptureIntent(), MIRROR_REQUEST);
     }

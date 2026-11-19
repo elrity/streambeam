@@ -61,7 +61,7 @@ public class MirrorService extends Service {
             finish(null);
             return START_NOT_STICKY;
         }
-        startForegroundNotice();
+        startForegroundNotice(intent.getBooleanExtra(EXTRA_SOUND, false));
         running = this;
         try {
             MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
@@ -169,7 +169,7 @@ public class MirrorService extends Service {
         if (sound.isMusicActive() && now - Math.max(a.lastSound(), mutedAt) > 6000) main.post(this::unmutePhone);
     }
 
-    private void startForegroundNotice() {
+    private void startForegroundNotice(boolean sound) {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         Notification.Builder b;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -189,6 +189,17 @@ public class MirrorService extends Service {
                 .setOngoing(true)
                 .addAction(new Notification.Action.Builder(null, "Stop", stop).build())
                 .build();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && sound
+                && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // Without the microphone type, Android hands the sound capture only silence as soon as another app is
+            // in front (Maps, YouTube…), so the car would get no sound while the phone is muted.
+            try {
+                startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+                return;
+            } catch (RuntimeException notAllowed) {
+                // fall back to screen only
+            }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(7, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
         else startForeground(7, n);
     }

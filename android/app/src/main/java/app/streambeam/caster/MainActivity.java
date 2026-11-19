@@ -141,6 +141,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        if (request == Bridge.PERMISSION_REQUEST && bridge != null) {
+            bridge.onMirrorPermissions();
+            return;
+        }
         if (request == LOCATION_REQUEST && geoCallback != null) {
             geoCallback.invoke(geoOrigin, results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED, false);
             geoCallback = null;
