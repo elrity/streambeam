@@ -1,0 +1,11 @@
+{
+  "name": "RouterPilot",
+  "short_name": "RouterPilot",
+  "description": "Control your home router: devices, Wi-Fi, restarts, speed limits and website blocking.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

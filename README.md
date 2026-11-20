@@ -67,6 +67,15 @@ and each piece stays where you put it while you walk around.
 **Open it:** https://elrity.github.io/streambeam/furniture/ (camera AR needs
 an Android phone with Chrome; any device can use the 3D room preview).
 
+## RouterPilot (control your home router)
+
+A separate Android app in [`router-android/`](router-android/README.md): see the devices on your
+Wi-Fi, stop a device's internet, set speed limits and priority, block websites, turn Wi-Fi off (it's
+back when the router restarts) and restart the router. Works with OpenWrt and MikroTik routers.
+
+**Download:** [RouterPilot releases](https://github.com/elrity/streambeam/releases?q=routerpilot&expanded=true)
+· **Browser demo:** https://elrity.github.io/streambeam/router/
+
 ## What's in this repository
 
 | Folder | What it is |
@@ -74,5 +83,6 @@ an Android phone with Chrome; any device can use the 3D room preview).
 | `web/` | The app (`index.html`, one file) and an optional Node server (`server.mjs`) for a shared Gemini key, an app password and casting to VLC. See [web/README.md](web/README.md). |
 | `web/furniture/` | RoomFit, the AR furniture app. See [web/furniture/README.md](web/furniture/README.md). |
 | `android/` | The Android app: hosts the app and adds real screen search and casting (Google Cast, DLNA). See [android/README.md](android/README.md). |
+| `web/router/` + `router-android/` | RouterPilot, the router control app. See [router-android/README.md](router-android/README.md). |
 | `.github/workflows/` | Publishes `web/` to GitHub Pages and builds the APK on every change. |
 | `render.yaml` | Optional: run the server on Render instead of GitHub Pages. |

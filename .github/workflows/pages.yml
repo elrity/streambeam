@@ -1,5 +1,6 @@
 # Publishes the web app (web/) to GitHub Pages: https://elrity.github.io/streambeam/
 # and RoomFit, the AR furniture app (web/furniture/): https://elrity.github.io/streambeam/furniture/
+# and the RouterPilot demo (web/router/): https://elrity.github.io/streambeam/router/
 name: Publish web app
 
 on:
@@ -34,6 +35,7 @@ jobs:
           cp web/index.html web/manifest.webmanifest web/sw.js _site/
           cp -r web/icons _site/
           cp -r web/furniture _site/furniture
+          cp -r web/router _site/router
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5

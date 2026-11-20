@@ -1,0 +1,56 @@
+// RouterPilot for Android: the router control screens (web/router, bundled into the APK) plus a small
+// native bridge that talks to the router on the local network (no CORS limits, self-signed HTTPS allowed).
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from the environment (GitHub secrets); without it the build uses the debug key.
+def keystore = System.getenv('ANDROID_KEYSTORE_FILE')
+
+android {
+    namespace 'app.routerpilot'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.routerpilot'
+        minSdk 23
+        targetSdk 35
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName System.getenv('VERSION_NAME') ?: '1.0'
+    }
+
+    // The screens live in web/router so the same files also run as a browser demo on GitHub Pages.
+    sourceSets {
+        main {
+            assets.srcDirs = ['../../web/router']
+        }
+    }
+
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: 'streambeam'
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}
