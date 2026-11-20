@@ -140,10 +140,11 @@ public class MirrorService extends Service {
     /*
      * The captured sound goes to the car inside the video, and Android also keeps playing it on the phone
      * (speaker or Bluetooth), which would be heard twice and out of step. Muting the phone's media volume
-     * silences only the phone on most phones: playback capture records at full volume. On newer Android
-     * versions a mute can silence the capture too; the watchdog notices (media playing, only silence captured)
-     * and instead turns the phone down to its lowest step, which the capture isn't affected by. If even that
-     * leaves the car silent, the phone's volume goes back to how it was.
+     * silences only the phone on most phones: playback capture records at full volume. On some newer phones
+     * a mute silences the capture too. That is checked once, at the start: if media plays for 4 s and only
+     * silence is captured, the phone is turned down to its lowest step instead (the capture isn't affected by
+     * the volume level); if even that leaves the car silent, the phone's volume goes back to how it was.
+     * Once sound has reached the car, the check stops, so a quiet scene never turns the phone's sound back on.
      */
     private void mutePhone() {
         try {
@@ -159,6 +160,8 @@ public class MirrorService extends Service {
 
     private int savedVolume = -1; // the phone's media volume before it was turned down (lowest-step mode)
     private int muteStep; // 1 muted, 2 turned down to the lowest step
+    private volatile boolean muteChecked; // sound reached the car while the phone was quiet: nothing more to check
+    private long silentSince;
 
     private void unmutePhone() {
         if (!muted) return;
@@ -181,6 +184,7 @@ public class MirrorService extends Service {
             sound.setStreamVolume(AudioManager.STREAM_MUSIC, Math.min(low, Math.max(1, savedVolume)), 0);
             muteStep = 2;
             mutedAt = System.currentTimeMillis();
+            silentSince = 0;
         } catch (RuntimeException e) {
             unmutePhone();
         }
@@ -188,8 +192,18 @@ public class MirrorService extends Service {
 
     private void checkMute(long now) {
         AudioCapture a = audio;
-        if (!muted || a == null || now - mutedAt < 2500) return;
-        if (sound.isMusicActive() && now - Math.max(a.lastSound(), mutedAt) > 2500) {
+        if (!muted || muteChecked || a == null) return;
+        if (a.lastSound() > mutedAt) { // the car gets sound while the phone is quiet: done
+            muteChecked = true;
+            return;
+        }
+        if (!sound.isMusicActive()) {
+            silentSince = 0;
+            return;
+        }
+        if (silentSince == 0) silentSince = now;
+        else if (now - silentSince >= 4000) {
+            silentSince = 0;
             main.post(muteStep == 1 ? this::lowestStepInstead : this::unmutePhone);
         }
     }
