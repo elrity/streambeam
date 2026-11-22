@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
 
+        MirrorService.restoreVolume(this); // in case Android closed the app while it was mirroring
         bridge = new Bridge(this);
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             String origin = start.getScheme() + "://" + start.getAuthority();

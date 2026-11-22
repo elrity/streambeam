@@ -1987,6 +1987,7 @@ scrim.addEventListener('click', e => {
   else if (act === 'mirrorFromSheet') { closeSheet(); go('mirror'); }
   else if (act === 'disconnect') {
     if (S.device.startsWith('n:')) { extCmd('stop'); ncall('disconnect').catch(() => {}); P.ext = ''; P.playing = false; }
+    if (N.mirror.state) N.mirror = { state: '', at: 0 }; // the app ends mirroring with the disconnect (and gives the volume back)
     S.device = ''; S.deviceName = ''; save(); closeSheet(); toast('Disconnected'); render();
   }
   else if ('dev' in b.dataset) pickDevice(b.dataset.dev);
@@ -2211,9 +2212,9 @@ function addFiles(files) {
 }));
 
 /* ---------- Idle screen ----------
-   After a minute without a touch while a screen plays or mirrors: casting shows a black clock screen
-   and dims the phone; mirroring only dims (the car shows whatever the phone shows, so an idle screen
-   would appear in the car too) and keeps the phone awake, since a sleeping phone stops the mirror. */
+   After a minute without a touch while a screen plays or mirrors: a black screen with the logo and clock,
+   and the phone dimmed. While mirroring the car shows it too (logo and clock instead of the app's
+   controls), and the phone is kept awake, since a sleeping phone stops the mirror. A tap wakes it. */
 const IDLE = { last: Date.now(), on: false, kind: '', awake: false };
 const castingNow = () => nativeOn() && P.playing && !!P.item;
 function idleScreen(dim) { if (N.on) ncall('screen', { dim, awake: N.mirror.state === 'live' }).catch(() => {}); }
@@ -2223,12 +2224,13 @@ function idleDraw() {
   el.innerHTML = `<div class="ibox" style="transform:translate(${(Math.random() * 40 - 20) | 0}px,${(Math.random() * 60 - 30) | 0}px)">
     <img src="icons/logo.webp?v=2" alt=""><div class="iclock">${timeStr(now)}</div>
     <div class="idate">${esc(now.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }))}</div>
-    ${P.item ? `<div class="inow">${esc(P.item.title || 'Playing')} · ${esc(devName())}</div>` : ''}
+    ${N.mirror.state === 'live' ? `<div class="inow">Mirroring to ${esc(devName())}</div>` : P.item ? `<div class="inow">${esc(P.item.title || 'Playing')} · ${esc(devName())}</div>` : ''}
     <div class="ihint">Tap to wake</div></div>`;
 }
 function idleEnter() {
   IDLE.on = true; IDLE.kind = N.mirror.state === 'live' ? 'mirror' : 'cast';
-  if (IDLE.kind === 'cast') { $('#idle').hidden = false; idleDraw(); }
+  // While mirroring the car shows this screen too: logo and clock instead of the app's controls.
+  $('#idle').hidden = false; idleDraw();
   idleScreen(true);
 }
 function idleWake() {
@@ -2239,12 +2241,12 @@ function idleWake() {
 }
 ['pointerdown', 'keydown', 'wheel'].forEach(ev => addEventListener(ev, () => { if (!IDLE.on) IDLE.last = Date.now(); }, { capture: true, passive: true }));
 $('#idle').addEventListener('click', e => { e.stopPropagation(); idleWake(); });
-addEventListener('pointerdown', e => { if (IDLE.on && IDLE.kind === 'mirror') idleWake(); }, { capture: true });
+// The idle screen covers the page while mirroring too, so its own tap wakes it (the tap doesn't reach the page).
 setInterval(() => {
   if (ED) return; // Rity IPTV has no idle screen
   const live = N.mirror.state === 'live', busy = live || castingNow();
   if (N.on && live !== IDLE.awake) { IDLE.awake = live; ncall('screen', { dim: IDLE.on, awake: live }).catch(() => {}); }
-  if (IDLE.on) { if (!busy) idleWake(); else if (IDLE.kind === 'cast' && new Date().getSeconds() < 5) idleDraw(); return; }
+  if (IDLE.on) { if (!busy) idleWake(); else if (new Date().getSeconds() < 5) idleDraw(); return; }
   if (busy && !document.hidden && !sheetKind && Date.now() - IDLE.last > 60000) idleEnter();
 }, 5000);
 document.addEventListener('visibilitychange', () => { if (document.hidden && IDLE.on) idleWake(); });

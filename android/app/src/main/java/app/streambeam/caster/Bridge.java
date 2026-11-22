@@ -222,6 +222,11 @@ class Bridge implements WebViewCompat.WebMessageListener {
                 break;
             }
             case "disconnect":
+                // Disconnecting from the screen also ends mirroring to it, which gives the phone its volume back.
+                if (MirrorService.isRunning()) {
+                    mirrorStoppedByPage = true;
+                    stopMirror();
+                }
                 cast.disconnect();
                 dlna.disconnect();
                 active = null;

@@ -55,6 +55,31 @@ public class MirrorService extends Service {
         if (running != null) running.finish(null);
     }
 
+    /*
+     * The phone's volume as it was before mirroring is also kept on disk, so it comes back even if Android
+     * closed the app while mirroring (the service never got to finish). Called when the app starts.
+     */
+    private static final String SOUND_PREFS = "mirror_sound";
+
+    static void restoreVolume(Context context) {
+        if (running != null) return;
+        android.content.SharedPreferences p = context.getSharedPreferences(SOUND_PREFS, MODE_PRIVATE);
+        int step = p.getInt("step", 0);
+        if (step == 0) return;
+        try {
+            AudioManager am = (AudioManager) context.getSystemService(AUDIO_SERVICE);
+            int saved = p.getInt("saved", -1);
+            if (step == 2 && saved >= 0) am.setStreamVolume(AudioManager.STREAM_MUSIC, saved, 0);
+            else am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0);
+        } catch (RuntimeException ignored) {
+        }
+        p.edit().clear().apply();
+    }
+
+    private void rememberVolume() {
+        getSharedPreferences(SOUND_PREFS, MODE_PRIVATE).edit().putInt("step", muted ? muteStep : 0).putInt("saved", savedVolume).apply();
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || ACTION_STOP.equals(intent.getAction())) {
@@ -154,6 +179,7 @@ public class MirrorService extends Service {
             muteStep = 1;
             muted = true;
             mutedAt = System.currentTimeMillis();
+            rememberVolume();
         } catch (RuntimeException ignored) {
         }
     }
@@ -172,6 +198,7 @@ public class MirrorService extends Service {
         } catch (RuntimeException ignored) {
         }
         savedVolume = -1;
+        rememberVolume();
     }
 
     /** Muting silenced the capture too: unmute, then keep the phone at its lowest volume step instead. */
@@ -185,6 +212,7 @@ public class MirrorService extends Service {
             muteStep = 2;
             mutedAt = System.currentTimeMillis();
             silentSince = 0;
+            rememberVolume();
         } catch (RuntimeException e) {
             unmutePhone();
         }
