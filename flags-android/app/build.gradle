@@ -1,0 +1,62 @@
+// World Flags for Android: the game in web/flags/ packed inside the app, so it plays offline.
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from the environment (GitHub secrets); without it the build uses the debug key.
+def keystore = System.getenv('ANDROID_KEYSTORE_FILE')
+
+android {
+    namespace 'app.worldflags.game'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'app.worldflags.game'
+        minSdk 23
+        targetSdk 35
+        versionCode((System.getenv('VERSION_CODE') ?: '1') as int)
+        versionName System.getenv('VERSION_NAME') ?: '1.0'
+    }
+
+    sourceSets {
+        main {
+            // The game itself: web/flags/ goes into the APK as assets/game/.
+            assets.srcDirs = [layout.buildDirectory.dir('generated/gameAssets').get().asFile]
+        }
+    }
+
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: 'streambeam'
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig keystore ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+def copyGame = tasks.register('copyGame', Sync) {
+    from rootProject.file('../web/flags')
+    exclude 'README.md'
+    into layout.buildDirectory.dir('generated/gameAssets/game')
+}
+tasks.named('preBuild') { dependsOn copyGame }

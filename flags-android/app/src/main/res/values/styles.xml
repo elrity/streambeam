@@ -1,0 +1,9 @@
+<resources>
+    <color name="icon_bg">#7209B7</color>
+    <style name="Theme.WorldFlags" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">#3A0CA3</item>
+        <item name="android:navigationBarColor">#F72585</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+</resources>

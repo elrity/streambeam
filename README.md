@@ -67,12 +67,22 @@ and each piece stays where you put it while you walk around.
 **Open it:** https://elrity.github.io/streambeam/furniture/ (camera AR needs
 an Android phone with Chrome; any device can use the 3D room preview).
 
+## World Flags (flag quiz game)
+
+A colourful game in [`web/flags/`](web/flags/README.md): name the flag before the timer runs out, five
+levels, a 2–10 second timer, music and a score that rewards speed and long streaks.
+
+**Play it:** https://elrity.github.io/streambeam/flags/ · **Android APK:** the `world-flags-…` release on
+the releases page.
+
 ## What's in this repository
 
 | Folder | What it is |
 | --- | --- |
 | `web/` | The app (`index.html`, one file) and an optional Node server (`server.mjs`) for a shared Gemini key, an app password and casting to VLC. See [web/README.md](web/README.md). |
 | `web/furniture/` | RoomFit, the AR furniture app. See [web/furniture/README.md](web/furniture/README.md). |
+| `web/flags/` | World Flags, the flag quiz game. See [web/flags/README.md](web/flags/README.md). |
+| `flags-android/` | World Flags as an Android app (offline APK). |
 | `android/` | The Android app: hosts the app and adds real screen search and casting (Google Cast, DLNA). See [android/README.md](android/README.md). |
 | `.github/workflows/` | Publishes `web/` to GitHub Pages and builds the APK on every change. |
 | `render.yaml` | Optional: run the server on Render instead of GitHub Pages. |

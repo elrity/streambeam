@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#2b1055">
+<title>World Flags</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="sky" aria-hidden="true"></div>
+
+<!-- Main menu -->
+<section id="menu" class="screen active">
+  <header class="logo">
+    <div class="globe">🌍</div>
+    <h1><span>W</span><span>o</span><span>r</span><span>l</span><span>d</span> <span>F</span><span>l</span><span>a</span><span>g</span><span>s</span></h1>
+    <p class="tag">Guess the flag before time runs out!</p>
+  </header>
+
+  <div class="panel">
+    <h2>Difficulty</h2>
+    <div id="levels" class="levels"></div>
+
+    <h2 class="row-title">Time per flag <b id="timeLabel">10 s</b></h2>
+    <div class="slider-wrap">
+      <input id="time" type="range" min="2" max="10" step="2" value="10" aria-label="Seconds per flag">
+      <div class="ticks"><span>2</span><span>4</span><span>6</span><span>8</span><span>10</span></div>
+    </div>
+
+    <div class="toggles">
+      <button id="musicBtn" class="chip on">🎵 Music</button>
+      <button id="sfxBtn" class="chip on">🔊 Sound</button>
+    </div>
+  </div>
+
+  <button id="playBtn" class="big-btn">▶ PLAY</button>
+  <p id="bestLine" class="best"></p>
+</section>
+
+<!-- Game -->
+<section id="game" class="screen">
+  <div class="hud">
+    <button id="quitBtn" class="icon-btn" aria-label="Back to menu">✕</button>
+    <div class="hud-mid">
+      <div id="hearts" class="hearts"></div>
+      <div id="progress" class="progress-text">1 / 20</div>
+    </div>
+    <div class="score-box"><small>SCORE</small><b id="score">0</b></div>
+  </div>
+
+  <div class="timer">
+    <div id="timerFill" class="timer-fill"></div>
+    <span id="timerNum" class="timer-num">10</span>
+  </div>
+
+  <div id="streak" class="streak">🔥 x1.0</div>
+
+  <div id="stage" class="stage"></div>
+
+  <div id="choices" class="choices"></div>
+  <div id="popup" class="popup"></div>
+</section>
+
+<!-- Results -->
+<section id="results" class="screen">
+  <div class="panel result-panel">
+    <h2 id="resTitle">Great game!</h2>
+    <div id="stars" class="stars"></div>
+    <div class="res-score"><small>SCORE</small><b id="resScore">0</b></div>
+    <p id="resBest" class="new-best"></p>
+    <div class="res-grid">
+      <div><b id="resCorrect">0</b><small>correct</small></div>
+      <div><b id="resStreak">0</b><small>best streak</small></div>
+      <div><b id="resSpeed">0</b><small>avg seconds</small></div>
+    </div>
+    <div id="resMissed" class="missed"></div>
+  </div>
+  <button id="againBtn" class="big-btn">↻ PLAY AGAIN</button>
+  <button id="menuBtn" class="ghost-btn">Main menu</button>
+</section>
+
+<script src="data.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
